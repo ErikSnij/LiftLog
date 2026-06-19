@@ -9,12 +9,13 @@ import androidx.room.TypeConverters
 @Database(
     entities = [
         CategoryEntity::class,
+        MuscleGroupEntity::class,
         AreaEntity::class,
         ExerciseEntity::class,
         SetRowEntity::class,
         LogEntryEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -31,7 +32,7 @@ abstract class LiftLogDatabase : RoomDatabase() {
                     context.applicationContext,
                     LiftLogDatabase::class.java,
                     "liftlog.db",
-                ).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
             }
     }
 }

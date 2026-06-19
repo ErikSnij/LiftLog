@@ -44,11 +44,18 @@ data class AreaUi(
     val exercises: List<ExerciseUi>,
 )
 
-data class CategoryUi(
+data class MuscleGroupUi(
     val id: Long,
     val name: String,
     val lastPerformed: LocalDate?,
     val areas: List<AreaUi>,
+)
+
+data class CategoryUi(
+    val id: Long,
+    val name: String,
+    val lastPerformed: LocalDate?,
+    val muscleGroups: List<MuscleGroupUi>,
 )
 
 data class TreeUi(
@@ -68,63 +75,75 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
 
     val tree: StateFlow<TreeUi> = combine(
         dao.observeCategories(),
+        dao.observeMuscleGroups(),
         dao.observeAreas(),
         dao.observeExercises(),
         dao.observeAllSetRows(),
         dao.observeLatestEntryPerSetRow(),
         dao.observeExerciseLastPerformed(),
         dao.observeAreaLastPerformed(),
+        dao.observeMuscleGroupLastPerformed(),
         dao.observeCategoryLastPerformed(),
         dao.observeLogEntryCount(),
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val categories = values[0] as List<com.example.gym.data.CategoryEntity>
         @Suppress("UNCHECKED_CAST")
-        val areas = values[1] as List<com.example.gym.data.AreaEntity>
+        val muscleGroups = values[1] as List<com.example.gym.data.MuscleGroupEntity>
         @Suppress("UNCHECKED_CAST")
-        val exercises = values[2] as List<com.example.gym.data.ExerciseEntity>
+        val areas = values[2] as List<com.example.gym.data.AreaEntity>
         @Suppress("UNCHECKED_CAST")
-        val setRows = values[3] as List<com.example.gym.data.SetRowEntity>
+        val exercises = values[3] as List<com.example.gym.data.ExerciseEntity>
         @Suppress("UNCHECKED_CAST")
-        val latest = values[4] as List<com.example.gym.data.LatestEntry>
+        val setRows = values[4] as List<com.example.gym.data.SetRowEntity>
         @Suppress("UNCHECKED_CAST")
-        val exLast = values[5] as List<com.example.gym.data.LastPerformed>
+        val latest = values[5] as List<com.example.gym.data.LatestEntry>
         @Suppress("UNCHECKED_CAST")
-        val areaLast = values[6] as List<com.example.gym.data.LastPerformed>
+        val exLast = values[6] as List<com.example.gym.data.LastPerformed>
         @Suppress("UNCHECKED_CAST")
-        val catLast = values[7] as List<com.example.gym.data.LastPerformed>
-        val logEntryCount = values[8] as Int
+        val areaLast = values[7] as List<com.example.gym.data.LastPerformed>
+        @Suppress("UNCHECKED_CAST")
+        val mgLast = values[8] as List<com.example.gym.data.LastPerformed>
+        @Suppress("UNCHECKED_CAST")
+        val catLast = values[9] as List<com.example.gym.data.LastPerformed>
+        val logEntryCount = values[10] as Int
 
         val latestBySetRow = latest.associateBy { it.setRowId }
         val exLastById = exLast.associate { it.parentId to it.lastPerformed }
         val areaLastById = areaLast.associate { it.parentId to it.lastPerformed }
+        val mgLastById = mgLast.associate { it.parentId to it.lastPerformed }
         val catLastById = catLast.associate { it.parentId to it.lastPerformed }
 
         val setRowsByExercise = setRows.groupBy { it.exerciseId }
         val exercisesByArea = exercises.groupBy { it.areaId }
-        val areasByCategory = areas.groupBy { it.categoryId }
+        val areasByMuscleGroup = areas.groupBy { it.muscleGroupId }
+        val muscleGroupsByCategory = muscleGroups.groupBy { it.categoryId }
 
+        // Within each level, sort children by most-recent activity (never-performed last).
         val categoryUis = categories.map { category ->
-            val areaUis = areasByCategory[category.id].orEmpty().map { area ->
-                val exerciseUis = exercisesByArea[area.id].orEmpty().map { exercise ->
-                    val rowUis = setRowsByExercise[exercise.id].orEmpty().map { row ->
-                        val entry = latestBySetRow[row.id]
-                        SetRowUi(
-                            id = row.id,
-                            reps = entry?.reps,
-                            weight = entry?.weight,
-                            note = row.note,
-                            flag = row.flag,
-                            date = entry?.date,
-                            hasEntry = entry != null,
-                            archived = row.archived,
-                        )
-                    }
-                    ExerciseUi(exercise.id, exercise.name, exLastById[exercise.id], rowUis)
-                }
-                AreaUi(area.id, area.name, areaLastById[area.id], exerciseUis)
-            }
-            CategoryUi(category.id, category.name, catLastById[category.id], areaUis)
+            val groupUis = muscleGroupsByCategory[category.id].orEmpty().map { group ->
+                val areaUis = areasByMuscleGroup[group.id].orEmpty().map { area ->
+                    val exerciseUis = exercisesByArea[area.id].orEmpty().map { exercise ->
+                        val rowUis = setRowsByExercise[exercise.id].orEmpty().map { row ->
+                            val entry = latestBySetRow[row.id]
+                            SetRowUi(
+                                id = row.id,
+                                reps = entry?.reps,
+                                weight = entry?.weight,
+                                note = row.note,
+                                flag = row.flag,
+                                date = entry?.date,
+                                hasEntry = entry != null,
+                                archived = row.archived,
+                            )
+                        }
+                        ExerciseUi(exercise.id, exercise.name, exLastById[exercise.id], rowUis)
+                    }.sortedWith(compareByDescending { it.lastPerformed })
+                    AreaUi(area.id, area.name, areaLastById[area.id], exerciseUis)
+                }.sortedWith(compareByDescending { it.lastPerformed })
+                MuscleGroupUi(group.id, group.name, mgLastById[group.id], areaUis)
+            }.sortedWith(compareByDescending { it.lastPerformed })
+            CategoryUi(category.id, category.name, catLastById[category.id], groupUis)
         }
 
         TreeUi(
@@ -223,9 +242,11 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         data class EditNote(val setRowId: Long, val current: String?) : RowDialog
         data class Rename(val exerciseId: Long, val current: String) : RowDialog
         data class RenameArea(val areaId: Long, val current: String) : RowDialog
+        data class RenameMuscleGroup(val muscleGroupId: Long, val current: String) : RowDialog
         data class RenameCategory(val categoryId: Long, val current: String) : RowDialog
         data object AddCategory : RowDialog
-        data class AddArea(val categoryId: Long) : RowDialog
+        data class AddMuscleGroup(val categoryId: Long) : RowDialog
+        data class AddArea(val muscleGroupId: Long) : RowDialog
         data class AddExercise(val areaId: Long) : RowDialog
     }
 
@@ -235,6 +256,8 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
     var menuForSetRow by mutableStateOf<Long?>(null)
         private set
     var menuForArea by mutableStateOf<Long?>(null)
+        private set
+    var menuForMuscleGroup by mutableStateOf<Long?>(null)
         private set
     var menuForCategory by mutableStateOf<Long?>(null)
         private set
@@ -261,6 +284,15 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         menuForArea = null
     }
 
+    fun openMuscleGroupMenu(muscleGroupId: Long) {
+        cancelEdit()
+        menuForMuscleGroup = muscleGroupId
+    }
+
+    fun closeMuscleGroupMenu() {
+        menuForMuscleGroup = null
+    }
+
     fun openCategoryMenu(categoryId: Long) {
         cancelEdit()
         menuForCategory = categoryId
@@ -273,6 +305,7 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
     fun showDialog(d: RowDialog) {
         menuForSetRow = null
         menuForArea = null
+        menuForMuscleGroup = null
         menuForCategory = null
         dialog = d
     }
@@ -296,7 +329,8 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Add category / area / exercise ----------------------------------
 
     fun promptAddCategory() { dialog = RowDialog.AddCategory }
-    fun promptAddArea(categoryId: Long) { dialog = RowDialog.AddArea(categoryId) }
+    fun promptAddMuscleGroup(categoryId: Long) { dialog = RowDialog.AddMuscleGroup(categoryId) }
+    fun promptAddArea(muscleGroupId: Long) { dialog = RowDialog.AddArea(muscleGroupId) }
     fun promptAddExercise(areaId: Long) { dialog = RowDialog.AddExercise(areaId) }
 
     fun addCategory(name: String) {
@@ -307,11 +341,21 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun addArea(categoryId: Long, name: String) {
+    fun addMuscleGroup(categoryId: Long, name: String) {
         dialog = null
         val clean = name.trim().ifEmpty { return }
         viewModelScope.launch {
-            dao.insertArea(com.example.gym.data.AreaEntity(categoryId = categoryId, name = clean))
+            dao.insertMuscleGroup(
+                com.example.gym.data.MuscleGroupEntity(categoryId = categoryId, name = clean),
+            )
+        }
+    }
+
+    fun addArea(muscleGroupId: Long, name: String) {
+        dialog = null
+        val clean = name.trim().ifEmpty { return }
+        viewModelScope.launch {
+            dao.insertArea(com.example.gym.data.AreaEntity(muscleGroupId = muscleGroupId, name = clean))
         }
     }
 
@@ -333,6 +377,12 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         dialog = null
         val clean = name.trim()
         if (clean.isNotEmpty()) viewModelScope.launch { dao.renameArea(areaId, clean) }
+    }
+
+    fun saveRenameMuscleGroup(muscleGroupId: Long, name: String) {
+        dialog = null
+        val clean = name.trim()
+        if (clean.isNotEmpty()) viewModelScope.launch { dao.renameMuscleGroup(muscleGroupId, clean) }
     }
 
     fun saveRenameCategory(categoryId: Long, name: String) {
@@ -379,18 +429,41 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun deleteMuscleGroup(muscleGroupId: Long) {
+        menuForMuscleGroup = null
+        viewModelScope.launch {
+            val group = dao.getMuscleGroup(muscleGroupId) ?: return@launch
+            val areas = dao.areasOf(muscleGroupId)
+            val exercises = areas.flatMap { dao.exercisesOf(it.id) }
+            val rows = exercises.flatMap { dao.setRowsOf(it.id) }
+            val entries = rows.flatMap { dao.getEntriesFor(it.id) }
+            dao.deleteMuscleGroup(muscleGroupId)
+            undoRequest = UndoRequest("Muscle group deleted") {
+                db.withTransaction {
+                    dao.insertMuscleGroup(group)
+                    areas.forEach { dao.insertArea(it) }
+                    exercises.forEach { dao.insertExercise(it) }
+                    rows.forEach { dao.insertSetRow(it) }
+                    entries.forEach { dao.insertLogEntry(it) }
+                }
+            }
+        }
+    }
+
     fun deleteCategory(categoryId: Long) {
         menuForCategory = null
         viewModelScope.launch {
             val category = dao.getCategory(categoryId) ?: return@launch
-            val areas = dao.areasOf(categoryId)
+            val groups = dao.muscleGroupsOf(categoryId)
+            val areas = groups.flatMap { dao.areasOf(it.id) }
             val exercises = areas.flatMap { dao.exercisesOf(it.id) }
             val rows = exercises.flatMap { dao.setRowsOf(it.id) }
             val entries = rows.flatMap { dao.getEntriesFor(it.id) }
             dao.deleteCategory(categoryId)
-            undoRequest = UndoRequest("Muscle group deleted") {
+            undoRequest = UndoRequest("Category deleted") {
                 db.withTransaction {
                     dao.insertCategory(category)
+                    groups.forEach { dao.insertMuscleGroup(it) }
                     areas.forEach { dao.insertArea(it) }
                     exercises.forEach { dao.insertExercise(it) }
                     rows.forEach { dao.insertSetRow(it) }
@@ -450,5 +523,6 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
 
 // Stable keys for expansion state, namespaced by level so ids never collide.
 fun categoryKey(id: Long) = "C$id"
+fun muscleGroupKey(id: Long) = "G$id"
 fun areaKey(id: Long) = "A$id"
 fun exerciseKey(id: Long) = "E$id"

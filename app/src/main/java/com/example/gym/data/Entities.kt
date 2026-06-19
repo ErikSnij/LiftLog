@@ -16,8 +16,9 @@ data class CategoryEntity(
     val name: String,
 )
 
+/** Muscle group (e.g. Chest, Arms) — sits between a category (UPPER/LOWER) and a muscle (area). */
 @Entity(
-    tableName = "area",
+    tableName = "muscle_group",
     foreignKeys = [
         ForeignKey(
             entity = CategoryEntity::class,
@@ -28,9 +29,28 @@ data class CategoryEntity(
     ],
     indices = [Index("categoryId")],
 )
-data class AreaEntity(
+data class MuscleGroupEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val categoryId: Long,
+    val name: String,
+)
+
+/** A muscle (e.g. Upper chest, Biceps). Historically called "area"; now nested under a muscle group. */
+@Entity(
+    tableName = "area",
+    foreignKeys = [
+        ForeignKey(
+            entity = MuscleGroupEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["muscleGroupId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("muscleGroupId")],
+)
+data class AreaEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val muscleGroupId: Long,
     val name: String,
 )
 

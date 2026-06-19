@@ -152,7 +152,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                         stickyHeader(key = categoryKey(category.id)) {
                             CategoryHeader(
                                 name = category.name,
-                                onAddArea = { vm.promptAddArea(category.id) },
+                                onAddMuscleGroup = { vm.promptAddMuscleGroup(category.id) },
                                 menuExpanded = vm.menuForCategory == category.id,
                                 onLongPress = { vm.openCategoryMenu(category.id) },
                                 onDismissMenu = vm::closeCategoryMenu,
@@ -162,7 +162,22 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                                 onDelete = { vm.deleteCategory(category.id) },
                             )
                         }
-                        for (area in category.areas) {
+                        for (group in category.muscleGroups) {
+                            item(key = muscleGroupKey(group.id)) {
+                                MuscleGroupHeader(
+                                    name = group.name,
+                                    date = group.lastPerformed,
+                                    onAddArea = { vm.promptAddArea(group.id) },
+                                    menuExpanded = vm.menuForMuscleGroup == group.id,
+                                    onLongPress = { vm.openMuscleGroupMenu(group.id) },
+                                    onDismissMenu = vm::closeMuscleGroupMenu,
+                                    onRename = {
+                                        vm.showDialog(TreeViewModel.RowDialog.RenameMuscleGroup(group.id, group.name))
+                                    },
+                                    onDelete = { vm.deleteMuscleGroup(group.id) },
+                                )
+                            }
+                        for (area in group.areas) {
                             item(key = areaKey(area.id)) {
                                 AreaHeader(
                                     name = area.name,
@@ -227,6 +242,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                                 }
                             }
                         }
+                        }
                     }
                 }
             }
@@ -247,27 +263,39 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
             onDismiss = vm::dismissDialog,
         )
         is TreeViewModel.RowDialog.RenameArea -> TextFieldDialog(
-            title = "Rename area",
+            title = "Rename muscle",
             initial = d.current,
             onConfirm = { vm.saveRenameArea(d.areaId, it) },
             onDismiss = vm::dismissDialog,
         )
-        is TreeViewModel.RowDialog.RenameCategory -> TextFieldDialog(
+        is TreeViewModel.RowDialog.RenameMuscleGroup -> TextFieldDialog(
             title = "Rename muscle group",
+            initial = d.current,
+            onConfirm = { vm.saveRenameMuscleGroup(d.muscleGroupId, it) },
+            onDismiss = vm::dismissDialog,
+        )
+        is TreeViewModel.RowDialog.RenameCategory -> TextFieldDialog(
+            title = "Rename category",
             initial = d.current,
             onConfirm = { vm.saveRenameCategory(d.categoryId, it) },
             onDismiss = vm::dismissDialog,
         )
         TreeViewModel.RowDialog.AddCategory -> TextFieldDialog(
-            title = "New muscle group",
+            title = "New category",
             initial = "",
             onConfirm = { vm.addCategory(it) },
             onDismiss = vm::dismissDialog,
         )
-        is TreeViewModel.RowDialog.AddArea -> TextFieldDialog(
-            title = "New area",
+        is TreeViewModel.RowDialog.AddMuscleGroup -> TextFieldDialog(
+            title = "New muscle group",
             initial = "",
-            onConfirm = { vm.addArea(d.categoryId, it) },
+            onConfirm = { vm.addMuscleGroup(d.categoryId, it) },
+            onDismiss = vm::dismissDialog,
+        )
+        is TreeViewModel.RowDialog.AddArea -> TextFieldDialog(
+            title = "New muscle",
+            initial = "",
+            onConfirm = { vm.addArea(d.muscleGroupId, it) },
             onDismiss = vm::dismissDialog,
         )
         is TreeViewModel.RowDialog.AddExercise -> TextFieldDialog(
@@ -286,7 +314,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
 @Composable
 private fun CategoryHeader(
     name: String,
-    onAddArea: () -> Unit,
+    onAddMuscleGroup: () -> Unit,
     menuExpanded: Boolean,
     onLongPress: () -> Unit,
     onDismissMenu: () -> Unit,
@@ -310,17 +338,66 @@ private fun CategoryHeader(
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.weight(1f),
                 )
-                AddButton(tint = MaterialTheme.colorScheme.onPrimaryContainer, onClick = onAddArea)
+                AddButton(tint = MaterialTheme.colorScheme.onPrimaryContainer, onClick = onAddMuscleGroup)
             }
             HeaderMenu(
                 expanded = menuExpanded,
                 onDismiss = onDismissMenu,
-                renameLabel = "Rename group",
-                deleteLabel = "Delete group",
+                renameLabel = "Rename category",
+                deleteLabel = "Delete category",
                 onRename = onRename,
                 onDelete = onDelete,
             )
         }
+    }
+}
+
+/** Muscle-group header — the new mid level between a category (UPPER/LOWER) and a muscle. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MuscleGroupHeader(
+    name: String,
+    date: LocalDate?,
+    onAddArea: () -> Unit,
+    menuExpanded: Boolean,
+    onLongPress: () -> Unit,
+    onDismissMenu: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f))
+                .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                .padding(start = 16.dp, end = 4.dp, top = 5.dp, bottom = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = name,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = formatDate(date),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+            )
+            AddButton(tint = MaterialTheme.colorScheme.onSecondaryContainer, onClick = onAddArea)
+        }
+        HeaderMenu(
+            expanded = menuExpanded,
+            onDismiss = onDismissMenu,
+            renameLabel = "Rename muscle group",
+            deleteLabel = "Delete muscle group",
+            onRename = onRename,
+            onDelete = onDelete,
+        )
     }
 }
 
@@ -373,14 +450,14 @@ private fun AreaHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 .combinedClickable(onClick = {}, onLongClick = onLongPress)
-                .padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                .padding(start = 22.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = name,
-                fontSize = 13.sp,
+                fontSize = 12.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
@@ -397,8 +474,8 @@ private fun AreaHeader(
         HeaderMenu(
             expanded = menuExpanded,
             onDismiss = onDismissMenu,
-            renameLabel = "Rename area",
-            deleteLabel = "Delete area",
+            renameLabel = "Rename muscle",
+            deleteLabel = "Delete muscle",
             onRename = onRename,
             onDelete = onDelete,
         )
@@ -986,7 +1063,7 @@ private fun TopBar(
         }
         Spacer(Modifier.weight(1f))
         Text(
-            "+ Group",
+            "+ Category",
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.primary,

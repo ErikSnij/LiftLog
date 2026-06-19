@@ -14,6 +14,9 @@ interface LiftLogDao {
     @Query("SELECT * FROM category ORDER BY id")
     fun observeCategories(): Flow<List<CategoryEntity>>
 
+    @Query("SELECT * FROM muscle_group ORDER BY id")
+    fun observeMuscleGroups(): Flow<List<MuscleGroupEntity>>
+
     @Query("SELECT * FROM area ORDER BY id")
     fun observeAreas(): Flow<List<AreaEntity>>
 
@@ -74,9 +77,23 @@ interface LiftLogDao {
 
     @Query(
         """
+        SELECT mg.id AS parentId, MAX(le.date) AS lastPerformed
+        FROM muscle_group mg
+        LEFT JOIN area a ON a.muscleGroupId = mg.id
+        LEFT JOIN exercise e ON e.areaId = a.id
+        LEFT JOIN set_row sr ON sr.exerciseId = e.id AND sr.archived = 0
+        LEFT JOIN log_entry le ON le.setRowId = sr.id
+        GROUP BY mg.id
+        """
+    )
+    fun observeMuscleGroupLastPerformed(): Flow<List<LastPerformed>>
+
+    @Query(
+        """
         SELECT c.id AS parentId, MAX(le.date) AS lastPerformed
         FROM category c
-        LEFT JOIN area a ON a.categoryId = c.id
+        LEFT JOIN muscle_group mg ON mg.categoryId = c.id
+        LEFT JOIN area a ON a.muscleGroupId = mg.id
         LEFT JOIN exercise e ON e.areaId = a.id
         LEFT JOIN set_row sr ON sr.exerciseId = e.id AND sr.archived = 0
         LEFT JOIN log_entry le ON le.setRowId = sr.id
@@ -97,6 +114,9 @@ interface LiftLogDao {
 
     @Insert
     suspend fun insertCategory(category: CategoryEntity): Long
+
+    @Insert
+    suspend fun insertMuscleGroup(muscleGroup: MuscleGroupEntity): Long
 
     @Insert
     suspend fun insertArea(area: AreaEntity): Long
@@ -145,6 +165,9 @@ interface LiftLogDao {
     @Query("UPDATE area SET name = :name WHERE id = :areaId")
     suspend fun renameArea(areaId: Long, name: String)
 
+    @Query("UPDATE muscle_group SET name = :name WHERE id = :id")
+    suspend fun renameMuscleGroup(id: Long, name: String)
+
     @Query("UPDATE category SET name = :name WHERE id = :categoryId")
     suspend fun renameCategory(categoryId: Long, name: String)
 
@@ -172,11 +195,20 @@ interface LiftLogDao {
     @Query("DELETE FROM area WHERE id = :id")
     suspend fun deleteArea(id: Long)
 
+    @Query("SELECT * FROM muscle_group WHERE id = :id")
+    suspend fun getMuscleGroup(id: Long): MuscleGroupEntity?
+
+    @Query("SELECT * FROM area WHERE muscleGroupId = :muscleGroupId ORDER BY id")
+    suspend fun areasOf(muscleGroupId: Long): List<AreaEntity>
+
+    @Query("DELETE FROM muscle_group WHERE id = :id")
+    suspend fun deleteMuscleGroup(id: Long)
+
     @Query("SELECT * FROM category WHERE id = :id")
     suspend fun getCategory(id: Long): CategoryEntity?
 
-    @Query("SELECT * FROM area WHERE categoryId = :categoryId ORDER BY id")
-    suspend fun areasOf(categoryId: Long): List<AreaEntity>
+    @Query("SELECT * FROM muscle_group WHERE categoryId = :categoryId ORDER BY id")
+    suspend fun muscleGroupsOf(categoryId: Long): List<MuscleGroupEntity>
 
     @Query("DELETE FROM category WHERE id = :id")
     suspend fun deleteCategory(id: Long)
@@ -193,6 +225,9 @@ interface LiftLogDao {
 
     @Query("SELECT * FROM category ORDER BY id")
     suspend fun allCategories(): List<CategoryEntity>
+
+    @Query("SELECT * FROM muscle_group ORDER BY id")
+    suspend fun allMuscleGroups(): List<MuscleGroupEntity>
 
     @Query("SELECT * FROM area ORDER BY id")
     suspend fun allAreas(): List<AreaEntity>

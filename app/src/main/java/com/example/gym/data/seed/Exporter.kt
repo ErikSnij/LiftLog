@@ -10,7 +10,10 @@ import java.time.LocalDate
 data class ExportRoot(val exportedAt: String, val categories: List<ExportCategory>)
 
 @Serializable
-data class ExportCategory(val name: String, val areas: List<ExportArea>)
+data class ExportCategory(val name: String, val muscleGroups: List<ExportMuscleGroup>)
+
+@Serializable
+data class ExportMuscleGroup(val name: String, val muscles: List<ExportArea>)
 
 @Serializable
 data class ExportArea(val name: String, val exercises: List<ExportExercise>)
@@ -36,7 +39,8 @@ object Exporter {
     suspend fun export(db: LiftLogDatabase): String {
         val dao = db.dao()
         val categories = dao.allCategories()
-        val areas = dao.allAreas().groupBy { it.categoryId }
+        val muscleGroups = dao.allMuscleGroups().groupBy { it.categoryId }
+        val areas = dao.allAreas().groupBy { it.muscleGroupId }
         val exercises = dao.allExercises().groupBy { it.areaId }
         val setRows = dao.allSetRows().groupBy { it.exerciseId }
         val entries = dao.allLogEntries().groupBy { it.setRowId }
@@ -46,22 +50,27 @@ object Exporter {
             categories = categories.map { c ->
                 ExportCategory(
                     name = c.name,
-                    areas = areas[c.id].orEmpty().map { a ->
-                        ExportArea(
-                            name = a.name,
-                            exercises = exercises[a.id].orEmpty().map { e ->
-                                ExportExercise(
-                                    name = e.name,
-                                    setRows = setRows[e.id].orEmpty().map { sr ->
-                                        ExportSetRow(
-                                            note = sr.note,
-                                            flag = sr.flag.name,
-                                            archived = sr.archived,
-                                            entries = entries[sr.id].orEmpty()
-                                                .sortedBy { it.date }
-                                                .map { en ->
-                                                    ExportEntry(en.reps, en.weight, en.date.toString())
-                                                },
+                    muscleGroups = muscleGroups[c.id].orEmpty().map { mg ->
+                        ExportMuscleGroup(
+                            name = mg.name,
+                            muscles = areas[mg.id].orEmpty().map { a ->
+                                ExportArea(
+                                    name = a.name,
+                                    exercises = exercises[a.id].orEmpty().map { e ->
+                                        ExportExercise(
+                                            name = e.name,
+                                            setRows = setRows[e.id].orEmpty().map { sr ->
+                                                ExportSetRow(
+                                                    note = sr.note,
+                                                    flag = sr.flag.name,
+                                                    archived = sr.archived,
+                                                    entries = entries[sr.id].orEmpty()
+                                                        .sortedBy { it.date }
+                                                        .map { en ->
+                                                            ExportEntry(en.reps, en.weight, en.date.toString())
+                                                        },
+                                                )
+                                            },
                                         )
                                     },
                                 )

@@ -2,12 +2,14 @@ package com.example.gym.data.seed
 
 import android.content.Context
 import androidx.room.withTransaction
+import com.example.gym.data.AREA_TO_MUSCLE_GROUP
 import com.example.gym.data.AreaEntity
 import com.example.gym.data.CategoryEntity
 import com.example.gym.data.ExerciseEntity
 import com.example.gym.data.Flag
 import com.example.gym.data.LiftLogDatabase
 import com.example.gym.data.LogEntryEntity
+import com.example.gym.data.MuscleGroupEntity
 import com.example.gym.data.SetRowEntity
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
@@ -25,6 +27,8 @@ object SeedImporter {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    private val areaToGroup = AREA_TO_MUSCLE_GROUP.toMap()
+
     suspend fun seedIfEmpty(context: Context, db: LiftLogDatabase) {
         val dao = db.dao()
         if (dao.categoryCount() > 0) return
@@ -35,8 +39,14 @@ object SeedImporter {
         db.withTransaction {
             for (category in root.categories) {
                 val categoryId = dao.insertCategory(CategoryEntity(name = category.name))
+                // Insert the muscle-group level on demand, derived from each muscle's name.
+                val groupIds = HashMap<String, Long>()
                 for (area in category.areas) {
-                    val areaId = dao.insertArea(AreaEntity(categoryId = categoryId, name = area.name))
+                    val groupName = areaToGroup[area.name] ?: "Other"
+                    val groupId = groupIds.getOrPut(groupName) {
+                        dao.insertMuscleGroup(MuscleGroupEntity(categoryId = categoryId, name = groupName))
+                    }
+                    val areaId = dao.insertArea(AreaEntity(muscleGroupId = groupId, name = area.name))
                     for (exercise in area.exercises) {
                         val exerciseId =
                             dao.insertExercise(ExerciseEntity(areaId = areaId, name = exercise.name))
