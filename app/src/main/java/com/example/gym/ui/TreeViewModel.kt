@@ -190,12 +190,12 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         edit = null
     }
 
-    /** Tap the checkmark → write a new immutable LogEntry stamped today. */
+    /** Tap the checkmark → write a new immutable LogEntry stamped today (undoable). */
     fun confirm() {
         val state = edit ?: return
         edit = null
         viewModelScope.launch {
-            dao.insertLogEntry(
+            val id = dao.insertLogEntry(
                 com.example.gym.data.LogEntryEntity(
                     setRowId = state.setRowId,
                     reps = state.reps,
@@ -203,6 +203,7 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                     date = LocalDate.now(),
                 ),
             )
+            undoRequest = UndoRequest("Logged today") { dao.deleteLogEntry(id) }
         }
     }
 

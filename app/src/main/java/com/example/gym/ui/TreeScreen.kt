@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -47,6 +48,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,6 +96,15 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val app = context.applicationContext as com.example.gym.LiftLogApp
+    val listState = rememberLazyListState()
+
+    // Scrolling the page dismisses a pending edit — so an accidental tap on a
+    // value/date is easily shrugged off by just scrolling on.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (scrolling && vm.edit != null) vm.cancelEdit()
+        }
+    }
 
     // Surface reversible actions (archive / delete row) as an Undo snackbar.
     val undo = vm.undoRequest
@@ -130,7 +141,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                 )
                 HorizontalDivider()
 
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     for (category in tree.categories) {
                         stickyHeader(key = categoryKey(category.id)) {
                             CategoryHeader(
@@ -457,85 +468,102 @@ private fun SetRowLine(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Exercise name on the left (first row only); long-press → actions menu.
-            // Fixed width so the set values line up across an exercise's rows.
-            Box(
-                modifier = Modifier
-                    .width(150.dp)
-                    .combinedClickable(onClick = {}, onLongClick = onLongPress)
-                    .padding(vertical = 5.dp),
-            ) {
-                if (exerciseName != null) {
-                    Text(
-                        text = exerciseName,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = baseColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-
-            // Reps × weight sit right next to the name.
             if (edit?.showWheels == true) {
-                ValueWheels(
+                // Editing the value: a highlighted bar takes over the row entirely —
+                // ✕ cancel on the left, the wheels in the middle, ✓ confirm on the right.
+                // Everything else (name, graph, date) falls away while you work here.
+                WheelEditBar(
+                    modifier = Modifier.weight(1f),
                     reps = edit.reps,
                     weight = edit.weight,
                     onRepsSelected = onRepsSelected,
                     onWeightSelected = onWeightSelected,
+                    onConfirm = onConfirm,
+                    onCancel = onCancel,
                 )
             } else {
+                // Exercise name on the left (first row only); long-press → actions menu.
+                // Fixed width so the set values line up across an exercise's rows.
+                Box(
+                    modifier = Modifier
+                        .width(150.dp)
+                        .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                        .padding(vertical = 5.dp),
+                ) {
+                    if (exerciseName != null) {
+                        Text(
+                            text = exerciseName,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = baseColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                // Reps × weight sit right next to the name.
                 Text(
                     text = formatValue(shownReps, shownWeight),
                     fontSize = 13.sp,
-                    fontWeight = if (edit != null) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (edit != null) MaterialTheme.colorScheme.primary else baseColor,
+                    color = baseColor,
                     modifier = Modifier.clickable(onClick = onValueTap),
                 )
                 // ± flag sits right next to the reps × weight.
                 FlagCell(row.flag, dim = row.archived, onClick = onFlagTap)
-            }
 
-            // Flexible gap pushes the graph + date to the right edge; long-press here too.
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .combinedClickable(onClick = {}, onLongClick = onLongPress),
-            ) { Spacer(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
-
-            // Graph icon opens the history chart for this row.
-            GraphIcon(tint = mutedColor, onClick = onHistory)
-
-            if (edit?.armed == true) {
-                Text(
-                    text = "✓",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
+                // Flexible gap pushes the graph + date to the right edge; long-press here too.
+                Box(
                     modifier = Modifier
-                        .clickable(onClick = onConfirm)
-                        .padding(horizontal = 6.dp),
-                )
-                Text(
-                    text = "✕",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier
-                        .clickable(onClick = onCancel)
-                        .padding(horizontal = 6.dp),
-                )
-            } else {
-                // Fixed-width, end-aligned so the graph icons line up across rows.
-                Box(modifier = Modifier.width(56.dp), contentAlignment = Alignment.CenterEnd) {
-                    Text(
-                        text = formatDate(row.date),
-                        fontSize = 12.sp,
-                        color = mutedColor,
-                        maxLines = 1,
-                        modifier = Modifier.clickable(onClick = onDateTap),
-                    )
+                        .weight(1f)
+                        .combinedClickable(onClick = {}, onLongClick = onLongPress),
+                ) { Spacer(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
+
+                // Graph icon opens the history chart for this row.
+                GraphIcon(tint = mutedColor, onClick = onHistory)
+
+                // Fixed-width trailing slot: the graph never shifts between states.
+                Box(
+                    modifier = Modifier.width(72.dp),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    if (edit?.armed == true) {
+                        // Armed by tapping the date: ✕ cancel left, ✓ confirm right.
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "✕",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable(onClick = onCancel)
+                                    .padding(horizontal = 5.dp, vertical = 4.dp),
+                            )
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                text = "✓",
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable(onClick = onConfirm)
+                                    .padding(horizontal = 5.dp, vertical = 4.dp),
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = formatDate(row.date),
+                            fontSize = 12.sp,
+                            color = mutedColor,
+                            maxLines = 1,
+                            modifier = Modifier.clickable(onClick = onDateTap),
+                        )
+                    }
                 }
             }
         }
@@ -555,6 +583,57 @@ private fun SetRowLine(
         }
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    }
+}
+
+/** Highlighted in-row editing bar: ✕ cancel · wheels · ✓ confirm. */
+@Composable
+private fun WheelEditBar(
+    modifier: Modifier,
+    reps: Float?,
+    weight: Float?,
+    onRepsSelected: (Float?) -> Unit,
+    onWeightSelected: (Float?) -> Unit,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .background(
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                RoundedCornerShape(12.dp),
+            )
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "✕",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onCancel)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        )
+        Spacer(Modifier.weight(1f))
+        ValueWheels(
+            reps = reps,
+            weight = weight,
+            onRepsSelected = onRepsSelected,
+            onWeightSelected = onWeightSelected,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = "✓",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onConfirm)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        )
     }
 }
 
