@@ -221,6 +221,8 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
     sealed interface RowDialog {
         data class EditNote(val setRowId: Long, val current: String?) : RowDialog
         data class Rename(val exerciseId: Long, val current: String) : RowDialog
+        data class RenameArea(val areaId: Long, val current: String) : RowDialog
+        data class RenameCategory(val categoryId: Long, val current: String) : RowDialog
         data object AddCategory : RowDialog
         data class AddArea(val categoryId: Long) : RowDialog
         data class AddExercise(val areaId: Long) : RowDialog
@@ -230,6 +232,10 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
     class UndoRequest(val message: String, val perform: suspend () -> Unit)
 
     var menuForSetRow by mutableStateOf<Long?>(null)
+        private set
+    var menuForArea by mutableStateOf<Long?>(null)
+        private set
+    var menuForCategory by mutableStateOf<Long?>(null)
         private set
     var dialog by mutableStateOf<RowDialog?>(null)
         private set
@@ -245,8 +251,28 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         menuForSetRow = null
     }
 
+    fun openAreaMenu(areaId: Long) {
+        cancelEdit()
+        menuForArea = areaId
+    }
+
+    fun closeAreaMenu() {
+        menuForArea = null
+    }
+
+    fun openCategoryMenu(categoryId: Long) {
+        cancelEdit()
+        menuForCategory = categoryId
+    }
+
+    fun closeCategoryMenu() {
+        menuForCategory = null
+    }
+
     fun showDialog(d: RowDialog) {
         menuForSetRow = null
+        menuForArea = null
+        menuForCategory = null
         dialog = d
     }
 
@@ -298,6 +324,77 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                     com.example.gym.data.ExerciseEntity(areaId = areaId, name = clean),
                 )
                 dao.insertSetRow(com.example.gym.data.SetRowEntity(exerciseId = exerciseId))
+            }
+        }
+    }
+
+    fun saveRenameArea(areaId: Long, name: String) {
+        dialog = null
+        val clean = name.trim()
+        if (clean.isNotEmpty()) viewModelScope.launch { dao.renameArea(areaId, clean) }
+    }
+
+    fun saveRenameCategory(categoryId: Long, name: String) {
+        dialog = null
+        val clean = name.trim()
+        if (clean.isNotEmpty()) viewModelScope.launch { dao.renameCategory(categoryId, clean) }
+    }
+
+    // ---- Delete exercise / area / category (undoable; restores the subtree) ----
+
+    fun deleteExercise(exerciseId: Long) {
+        menuForSetRow = null
+        viewModelScope.launch {
+            val exercise = dao.getExercise(exerciseId) ?: return@launch
+            val rows = dao.setRowsOf(exerciseId)
+            val entries = rows.flatMap { dao.getEntriesFor(it.id) }
+            dao.deleteExercise(exerciseId)
+            undoRequest = UndoRequest("Exercise deleted") {
+                db.withTransaction {
+                    dao.insertExercise(exercise)
+                    rows.forEach { dao.insertSetRow(it) }
+                    entries.forEach { dao.insertLogEntry(it) }
+                }
+            }
+        }
+    }
+
+    fun deleteArea(areaId: Long) {
+        menuForArea = null
+        viewModelScope.launch {
+            val area = dao.getArea(areaId) ?: return@launch
+            val exercises = dao.exercisesOf(areaId)
+            val rows = exercises.flatMap { dao.setRowsOf(it.id) }
+            val entries = rows.flatMap { dao.getEntriesFor(it.id) }
+            dao.deleteArea(areaId)
+            undoRequest = UndoRequest("Area deleted") {
+                db.withTransaction {
+                    dao.insertArea(area)
+                    exercises.forEach { dao.insertExercise(it) }
+                    rows.forEach { dao.insertSetRow(it) }
+                    entries.forEach { dao.insertLogEntry(it) }
+                }
+            }
+        }
+    }
+
+    fun deleteCategory(categoryId: Long) {
+        menuForCategory = null
+        viewModelScope.launch {
+            val category = dao.getCategory(categoryId) ?: return@launch
+            val areas = dao.areasOf(categoryId)
+            val exercises = areas.flatMap { dao.exercisesOf(it.id) }
+            val rows = exercises.flatMap { dao.setRowsOf(it.id) }
+            val entries = rows.flatMap { dao.getEntriesFor(it.id) }
+            dao.deleteCategory(categoryId)
+            undoRequest = UndoRequest("Muscle group deleted") {
+                db.withTransaction {
+                    dao.insertCategory(category)
+                    areas.forEach { dao.insertArea(it) }
+                    exercises.forEach { dao.insertExercise(it) }
+                    rows.forEach { dao.insertSetRow(it) }
+                    entries.forEach { dao.insertLogEntry(it) }
+                }
             }
         }
     }

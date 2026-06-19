@@ -142,8 +142,44 @@ interface LiftLogDao {
     @Query("UPDATE exercise SET name = :name WHERE id = :exerciseId")
     suspend fun renameExercise(exerciseId: Long, name: String)
 
+    @Query("UPDATE area SET name = :name WHERE id = :areaId")
+    suspend fun renameArea(areaId: Long, name: String)
+
+    @Query("UPDATE category SET name = :name WHERE id = :categoryId")
+    suspend fun renameCategory(categoryId: Long, name: String)
+
     @Query("DELETE FROM set_row WHERE id = :setRowId")
     suspend fun deleteSetRow(setRowId: Long)
+
+    // ---- Delete exercise / area / category (cascade removes children) ----
+    // Paired one-shot reads capture the subtree first so the action is undoable.
+
+    @Query("SELECT * FROM exercise WHERE id = :id")
+    suspend fun getExercise(id: Long): ExerciseEntity?
+
+    @Query("SELECT * FROM set_row WHERE exerciseId = :exerciseId ORDER BY id")
+    suspend fun setRowsOf(exerciseId: Long): List<SetRowEntity>
+
+    @Query("DELETE FROM exercise WHERE id = :id")
+    suspend fun deleteExercise(id: Long)
+
+    @Query("SELECT * FROM area WHERE id = :id")
+    suspend fun getArea(id: Long): AreaEntity?
+
+    @Query("SELECT * FROM exercise WHERE areaId = :areaId ORDER BY id")
+    suspend fun exercisesOf(areaId: Long): List<ExerciseEntity>
+
+    @Query("DELETE FROM area WHERE id = :id")
+    suspend fun deleteArea(id: Long)
+
+    @Query("SELECT * FROM category WHERE id = :id")
+    suspend fun getCategory(id: Long): CategoryEntity?
+
+    @Query("SELECT * FROM area WHERE categoryId = :categoryId ORDER BY id")
+    suspend fun areasOf(categoryId: Long): List<AreaEntity>
+
+    @Query("DELETE FROM category WHERE id = :id")
+    suspend fun deleteCategory(id: Long)
 
     @Query("SELECT exerciseId FROM set_row WHERE id = :setRowId")
     suspend fun exerciseIdOf(setRowId: Long): Long?

@@ -133,14 +133,31 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     for (category in tree.categories) {
                         stickyHeader(key = categoryKey(category.id)) {
-                            CategoryHeader(category.name, onAddArea = { vm.promptAddArea(category.id) })
+                            CategoryHeader(
+                                name = category.name,
+                                onAddArea = { vm.promptAddArea(category.id) },
+                                menuExpanded = vm.menuForCategory == category.id,
+                                onLongPress = { vm.openCategoryMenu(category.id) },
+                                onDismissMenu = vm::closeCategoryMenu,
+                                onRename = {
+                                    vm.showDialog(TreeViewModel.RowDialog.RenameCategory(category.id, category.name))
+                                },
+                                onDelete = { vm.deleteCategory(category.id) },
+                            )
                         }
                         for (area in category.areas) {
                             item(key = areaKey(area.id)) {
                                 AreaHeader(
-                                    area.name,
-                                    area.lastPerformed,
+                                    name = area.name,
+                                    date = area.lastPerformed,
                                     onAddExercise = { vm.promptAddExercise(area.id) },
+                                    menuExpanded = vm.menuForArea == area.id,
+                                    onLongPress = { vm.openAreaMenu(area.id) },
+                                    onDismissMenu = vm::closeAreaMenu,
+                                    onRename = {
+                                        vm.showDialog(TreeViewModel.RowDialog.RenameArea(area.id, area.name))
+                                    },
+                                    onDelete = { vm.deleteArea(area.id) },
                                 )
                             }
                             for (exercise in area.exercises) {
@@ -186,6 +203,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                                             onArchive = { vm.archive(row.id) },
                                             onResurrect = { vm.resurrect(row.id) },
                                             onDelete = { vm.deleteRow(row.id) },
+                                            onDeleteExercise = { vm.deleteExercise(exercise.id) },
                                         )
                                     }
                                 }
@@ -208,6 +226,18 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
             title = "Rename exercise",
             initial = d.current,
             onConfirm = { vm.saveRename(d.exerciseId, it) },
+            onDismiss = vm::dismissDialog,
+        )
+        is TreeViewModel.RowDialog.RenameArea -> TextFieldDialog(
+            title = "Rename area",
+            initial = d.current,
+            onConfirm = { vm.saveRenameArea(d.areaId, it) },
+            onDismiss = vm::dismissDialog,
+        )
+        is TreeViewModel.RowDialog.RenameCategory -> TextFieldDialog(
+            title = "Rename muscle group",
+            initial = d.current,
+            onConfirm = { vm.saveRenameCategory(d.categoryId, it) },
             onDismiss = vm::dismissDialog,
         )
         TreeViewModel.RowDialog.AddCategory -> TextFieldDialog(
@@ -234,25 +264,64 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
 
 // ---- Headers (no folding; hierarchy conveyed by colour + indent) ---------
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CategoryHeader(name: String, onAddArea: () -> Unit) {
+private fun CategoryHeader(
+    name: String,
+    onAddArea: () -> Unit,
+    menuExpanded: Boolean,
+    onLongPress: () -> Unit,
+    onDismissMenu: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+) {
     // Sticky + opaque so the current category stays visible while scrolling.
     Surface(color = MaterialTheme.colorScheme.primaryContainer) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = name.uppercase(),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.weight(1f),
+        Box {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                    .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = name.uppercase(),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.weight(1f),
+                )
+                AddButton(tint = MaterialTheme.colorScheme.onPrimaryContainer, onClick = onAddArea)
+            }
+            HeaderMenu(
+                expanded = menuExpanded,
+                onDismiss = onDismissMenu,
+                renameLabel = "Rename group",
+                deleteLabel = "Delete group",
+                onRename = onRename,
+                onDelete = onDelete,
             )
-            AddButton(tint = MaterialTheme.colorScheme.onPrimaryContainer, onClick = onAddArea)
         }
+    }
+}
+
+/** Long-press menu shared by the category and area headers (rename + delete). */
+@Composable
+private fun HeaderMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    renameLabel: String,
+    deleteLabel: String,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        DropdownMenuItem(text = { Text(renameLabel) }, onClick = onRename)
+        DropdownMenuItem(
+            text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
+            onClick = onDelete,
+        )
     }
 }
 
@@ -270,30 +339,51 @@ private fun AddButton(tint: Color, onClick: () -> Unit) {
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AreaHeader(name: String, date: LocalDate?, onAddExercise: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = name,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+private fun AreaHeader(
+    name: String,
+    date: LocalDate?,
+    onAddExercise: () -> Unit,
+    menuExpanded: Boolean,
+    onLongPress: () -> Unit,
+    onDismissMenu: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                .padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = name,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = formatDate(date),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            AddButton(tint = MaterialTheme.colorScheme.primary, onClick = onAddExercise)
+        }
+        HeaderMenu(
+            expanded = menuExpanded,
+            onDismiss = onDismissMenu,
+            renameLabel = "Rename area",
+            deleteLabel = "Delete area",
+            onRename = onRename,
+            onDelete = onDelete,
         )
-        Text(
-            text = formatDate(date),
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        AddButton(tint = MaterialTheme.colorScheme.primary, onClick = onAddExercise)
     }
 }
 
@@ -624,6 +714,7 @@ private fun RowMenu(
     onArchive: () -> Unit,
     onResurrect: () -> Unit,
     onDelete: () -> Unit,
+    onDeleteExercise: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (archived) {
@@ -636,6 +727,10 @@ private fun RowMenu(
             DropdownMenuItem(
                 text = { Text("Delete row", color = MaterialTheme.colorScheme.error) },
                 onClick = onDelete,
+            )
+            DropdownMenuItem(
+                text = { Text("Delete exercise", color = MaterialTheme.colorScheme.error) },
+                onClick = onDeleteExercise,
             )
         }
     }
