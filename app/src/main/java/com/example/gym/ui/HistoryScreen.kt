@@ -300,20 +300,20 @@ private fun EntryEditor(
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            WheelPicker(
+            WheelOrTypeField(
                 items = repsValues,
-                initialIndex = indexOfValue(repsValues, draft.reps),
-                modifier = Modifier.width(56.dp),
-                label = { it?.let(::trimFloat) ?: "—" },
-                onSelected = { onRepsSelected(repsValues[it]) },
+                current = draft.reps,
+                width = 56.dp,
+                blankLabel = "—",
+                onSelected = onRepsSelected,
             )
             Text("×", fontSize = 13.sp)
-            WheelPicker(
+            WheelOrTypeField(
                 items = weightValues,
-                initialIndex = indexOfValue(weightValues, draft.weight),
-                modifier = Modifier.width(64.dp),
-                label = { it?.let(::trimFloat) ?: "BW" },
-                onSelected = { onWeightSelected(weightValues[it]) },
+                current = draft.weight,
+                width = 64.dp,
+                blankLabel = "BW",
+                onSelected = onWeightSelected,
             )
             Spacer(Modifier.weight(1f))
             // Date steppers

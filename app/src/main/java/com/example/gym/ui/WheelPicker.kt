@@ -1,6 +1,7 @@
 package com.example.gym.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,7 +18,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -37,11 +40,13 @@ fun WheelPicker(
     visibleCount: Int = 3,
     label: (Float?) -> String,
     onSelected: (Int) -> Unit,
+    onCenterClick: (() -> Unit)? = null,
 ) {
     val itemHeight = 32.dp
     val safeInitial = initialIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
     val state = rememberLazyListState(initialFirstVisibleItemIndex = safeInitial)
     val fling = rememberSnapFlingBehavior(state)
+    val scope = rememberCoroutineScope()
 
     // The item whose centre is closest to the viewport centre is the current selection.
     val centeredIndex by remember {
@@ -80,7 +85,14 @@ fun WheelPicker(
         ) {
             itemsIndexed(items) { index, value ->
                 Box(
-                    Modifier.height(itemHeight).fillMaxWidth(),
+                    Modifier
+                        .height(itemHeight)
+                        .fillMaxWidth()
+                        // Tap the centered item → type a value; tap another → scroll to it.
+                        .clickable {
+                            if (index == centeredIndex) onCenterClick?.invoke()
+                            else scope.launch { state.animateScrollToItem(index) }
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     val selected = index == centeredIndex

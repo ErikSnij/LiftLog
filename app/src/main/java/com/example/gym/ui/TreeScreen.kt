@@ -15,11 +15,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -44,16 +49,25 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -465,20 +479,90 @@ private fun ValueWheels(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
     ) {
-        WheelPicker(
+        WheelOrTypeField(
             items = repsValues,
-            initialIndex = indexOfValue(repsValues, reps),
-            modifier = Modifier.width(56.dp),
-            label = { it?.let(::trimFloat) ?: "—" },
-            onSelected = { onRepsSelected(repsValues[it]) },
+            current = reps,
+            width = 56.dp,
+            blankLabel = "—",
+            onSelected = onRepsSelected,
         )
         Text("×", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        WheelPicker(
+        WheelOrTypeField(
             items = weightValues,
-            initialIndex = indexOfValue(weightValues, weight),
-            modifier = Modifier.width(64.dp),
-            label = { it?.let(::trimFloat) ?: "BW" },
-            onSelected = { onWeightSelected(weightValues[it]) },
+            current = weight,
+            width = 64.dp,
+            blankLabel = "BW",
+            onSelected = onWeightSelected,
+        )
+    }
+}
+
+/**
+ * One value slot in the inline editor. Defaults to the scroll wheel; tapping the highlighted
+ * number switches it to a numeric keypad so big jumps (e.g. 0 → 100) take a couple of taps
+ * instead of a long scroll. Typed input updates the pending value live.
+ */
+@Composable
+internal fun WheelOrTypeField(
+    items: List<Float?>,
+    current: Float?,
+    width: Dp,
+    blankLabel: String,
+    onSelected: (Float?) -> Unit,
+) {
+    var typing by remember { mutableStateOf(false) }
+    if (typing) {
+        val focus = remember { FocusRequester() }
+        val focusManager = LocalFocusManager.current
+        var text by remember { mutableStateOf(current?.let(::trimFloat) ?: "") }
+        LaunchedEffect(Unit) { focus.requestFocus() }
+        Box(
+            modifier = Modifier.width(width).height(96.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(32.dp)
+                    .background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        RoundedCornerShape(6.dp),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                BasicTextField(
+                    value = text,
+                    onValueChange = {
+                        // Keep digits + a single decimal point; push the value live.
+                        val filtered = it.filter { c -> c.isDigit() || c == '.' }
+                        text = filtered
+                        onSelected(filtered.toFloatOrNull())
+                    },
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.focusRequester(focus).fillMaxWidth(),
+                )
+            }
+        }
+    } else {
+        WheelPicker(
+            items = items,
+            initialIndex = indexOfValue(items, current),
+            modifier = Modifier.width(width),
+            label = { it?.let(::trimFloat) ?: blankLabel },
+            onSelected = { onSelected(items[it]) },
+            onCenterClick = { typing = true },
         )
     }
 }
