@@ -115,7 +115,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     for (category in tree.categories) {
                         stickyHeader(key = categoryKey(category.id)) {
-                            CategoryHeader(category.name, category.lastPerformed)
+                            CategoryHeader(category.name)
                         }
                         for (area in category.areas) {
                             item(key = areaKey(area.id)) {
@@ -195,7 +195,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
 // ---- Headers (no folding; hierarchy conveyed by colour + indent) ---------
 
 @Composable
-private fun CategoryHeader(name: String, date: LocalDate?) {
+private fun CategoryHeader(name: String) {
     // Sticky + opaque so the current category stays visible while scrolling.
     Surface(color = MaterialTheme.colorScheme.primaryContainer) {
         Row(
@@ -209,12 +209,6 @@ private fun CategoryHeader(name: String, date: LocalDate?) {
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = formatDate(date),
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
             )
         }
     }
@@ -316,10 +310,10 @@ private fun SetRowLine(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             // Exercise name on the left (first row only); long-press → actions menu.
-            // It takes the flexible space so the values are pushed to the right.
+            // Fixed width so the set values line up across an exercise's rows.
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .width(120.dp)
                     .combinedClickable(onClick = {}, onLongClick = onLongPress)
                     .padding(vertical = 5.dp),
             ) {
@@ -335,6 +329,7 @@ private fun SetRowLine(
                 }
             }
 
+            // Reps × weight sit right next to the name.
             if (edit?.showWheels == true) {
                 ValueWheels(
                     reps = edit.reps,
@@ -353,6 +348,13 @@ private fun SetRowLine(
                 // ± flag sits right next to the reps × weight.
                 FlagCell(row.flag, dim = row.archived, onClick = onFlagTap)
             }
+
+            // Flexible gap pushes the graph + date to the right edge; long-press here too.
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .combinedClickable(onClick = {}, onLongClick = onLongPress),
+            ) { Spacer(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
 
             // Graph icon opens the history chart for this row.
             GraphIcon(tint = mutedColor, onClick = onHistory)
@@ -377,12 +379,16 @@ private fun SetRowLine(
                         .padding(horizontal = 6.dp),
                 )
             } else {
-                Text(
-                    text = formatDate(row.date),
-                    fontSize = 12.sp,
-                    color = mutedColor,
-                    modifier = Modifier.clickable(onClick = onDateTap),
-                )
+                // Fixed-width, end-aligned so the graph icons line up across rows.
+                Box(modifier = Modifier.width(56.dp), contentAlignment = Alignment.CenterEnd) {
+                    Text(
+                        text = formatDate(row.date),
+                        fontSize = 12.sp,
+                        color = mutedColor,
+                        maxLines = 1,
+                        modifier = Modifier.clickable(onClick = onDateTap),
+                    )
+                }
             }
         }
 
