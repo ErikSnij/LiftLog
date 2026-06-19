@@ -49,6 +49,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -684,31 +687,181 @@ private fun TopBar(
     onExport: () -> Unit,
     onAddCategory: () -> Unit,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val caretColor = MaterialTheme.colorScheme.onSurface
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("LiftLog", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Box {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { menuOpen = true }
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("LiftLog", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Spacer(Modifier.width(5.dp))
+                Canvas(
+                    modifier = Modifier
+                        .size(13.dp)
+                        .rotate(if (menuOpen) 180f else 0f),
+                ) {
+                    val path = Path().apply {
+                        moveTo(size.width * 0.18f, size.height * 0.36f)
+                        lineTo(size.width * 0.5f, size.height * 0.66f)
+                        lineTo(size.width * 0.82f, size.height * 0.36f)
+                    }
+                    drawPath(
+                        path,
+                        color = caretColor,
+                        style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                    )
+                }
+            }
+            AppMenu(
+                expanded = menuOpen,
+                showArchived = showArchived,
+                onDismiss = { menuOpen = false },
+                onExport = { menuOpen = false; onExport() },
+                onToggleArchived = onToggleArchived,
+            )
+        }
         Spacer(Modifier.weight(1f))
         Text(
             "+ Group",
-            fontSize = 13.sp,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable(onClick = onAddCategory).padding(horizontal = 8.dp),
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onAddCategory)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
         )
-        Text(
-            "Export",
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable(onClick = onExport).padding(horizontal = 8.dp),
+    }
+}
+
+/** Styled overflow menu for app-level actions (export + show-archived toggle). */
+@Composable
+private fun AppMenu(
+    expanded: Boolean,
+    showArchived: Boolean,
+    onDismiss: () -> Unit,
+    onExport: () -> Unit,
+    onToggleArchived: (Boolean) -> Unit,
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(16.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 2.dp,
+        shadowElevation = 10.dp,
+        modifier = Modifier.width(248.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onExport)
+                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ExportGlyph(MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Export data", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    "Share your log as JSON",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
         )
-        Text(
-            "Archived",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggleArchived(!showArchived) }
+                .padding(start = 16.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ArchiveGlyph(MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Show archived", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    "Reveal retired set rows",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = showArchived,
+                onCheckedChange = onToggleArchived,
+                modifier = Modifier.scale(0.78f),
+            )
+        }
+    }
+}
+
+/** Upload-tray glyph for the export action. */
+@Composable
+private fun ExportGlyph(tint: Color) {
+    Canvas(modifier = Modifier.size(20.dp)) {
+        val w = size.width
+        val h = size.height
+        val s = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val arrow = Path().apply {
+            moveTo(w * 0.5f, h * 0.80f)
+            lineTo(w * 0.5f, h * 0.16f)
+            moveTo(w * 0.30f, h * 0.40f)
+            lineTo(w * 0.5f, h * 0.16f)
+            lineTo(w * 0.70f, h * 0.40f)
+        }
+        drawPath(arrow, tint, style = s)
+        val tray = Path().apply {
+            moveTo(w * 0.22f, h * 0.60f)
+            lineTo(w * 0.22f, h * 0.86f)
+            lineTo(w * 0.78f, h * 0.86f)
+            lineTo(w * 0.78f, h * 0.60f)
+        }
+        drawPath(tray, tint, style = s)
+    }
+}
+
+/** Archive-box glyph for the show-archived toggle. */
+@Composable
+private fun ArchiveGlyph(tint: Color) {
+    Canvas(modifier = Modifier.size(20.dp)) {
+        val w = size.width
+        val h = size.height
+        val s = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val lid = Path().apply {
+            moveTo(w * 0.16f, h * 0.40f)
+            lineTo(w * 0.16f, h * 0.24f)
+            lineTo(w * 0.84f, h * 0.24f)
+            lineTo(w * 0.84f, h * 0.40f)
+        }
+        drawPath(lid, tint, style = s)
+        val box = Path().apply {
+            moveTo(w * 0.22f, h * 0.40f)
+            lineTo(w * 0.22f, h * 0.80f)
+            lineTo(w * 0.78f, h * 0.80f)
+            lineTo(w * 0.78f, h * 0.40f)
+        }
+        drawPath(box, tint, style = s)
+        drawLine(
+            tint,
+            androidx.compose.ui.geometry.Offset(w * 0.40f, h * 0.56f),
+            androidx.compose.ui.geometry.Offset(w * 0.60f, h * 0.56f),
+            strokeWidth = 1.8.dp.toPx(),
+            cap = StrokeCap.Round,
         )
-        Switch(checked = showArchived, onCheckedChange = onToggleArchived)
     }
 }
