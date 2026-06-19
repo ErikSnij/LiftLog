@@ -221,6 +221,9 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
     sealed interface RowDialog {
         data class EditNote(val setRowId: Long, val current: String?) : RowDialog
         data class Rename(val exerciseId: Long, val current: String) : RowDialog
+        data object AddCategory : RowDialog
+        data class AddArea(val categoryId: Long) : RowDialog
+        data class AddExercise(val areaId: Long) : RowDialog
     }
 
     /** A reversible action surfaced via snackbar. */
@@ -261,6 +264,42 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         dialog = null
         val clean = name.trim()
         if (clean.isNotEmpty()) viewModelScope.launch { dao.renameExercise(exerciseId, clean) }
+    }
+
+    // ---- Add category / area / exercise ----------------------------------
+
+    fun promptAddCategory() { dialog = RowDialog.AddCategory }
+    fun promptAddArea(categoryId: Long) { dialog = RowDialog.AddArea(categoryId) }
+    fun promptAddExercise(areaId: Long) { dialog = RowDialog.AddExercise(areaId) }
+
+    fun addCategory(name: String) {
+        dialog = null
+        val clean = name.trim().ifEmpty { return }
+        viewModelScope.launch {
+            dao.insertCategory(com.example.gym.data.CategoryEntity(name = clean))
+        }
+    }
+
+    fun addArea(categoryId: Long, name: String) {
+        dialog = null
+        val clean = name.trim().ifEmpty { return }
+        viewModelScope.launch {
+            dao.insertArea(com.example.gym.data.AreaEntity(categoryId = categoryId, name = clean))
+        }
+    }
+
+    fun addExercise(areaId: Long, name: String) {
+        dialog = null
+        val clean = name.trim().ifEmpty { return }
+        viewModelScope.launch {
+            // Seed one empty set row so the new exercise is immediately loggable.
+            db.withTransaction {
+                val exerciseId = dao.insertExercise(
+                    com.example.gym.data.ExerciseEntity(areaId = areaId, name = clean),
+                )
+                dao.insertSetRow(com.example.gym.data.SetRowEntity(exerciseId = exerciseId))
+            }
+        }
     }
 
     fun addSetRow(setRowId: Long) {

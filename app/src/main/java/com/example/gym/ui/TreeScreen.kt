@@ -109,17 +109,22 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                     showArchived = showArchived,
                     onToggleArchived = vm::updateShowArchived,
                     onExport = { scope.launch { shareExport(context, app) } },
+                    onAddCategory = vm::promptAddCategory,
                 )
                 HorizontalDivider()
 
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     for (category in tree.categories) {
                         stickyHeader(key = categoryKey(category.id)) {
-                            CategoryHeader(category.name)
+                            CategoryHeader(category.name, onAddArea = { vm.promptAddArea(category.id) })
                         }
                         for (area in category.areas) {
                             item(key = areaKey(area.id)) {
-                                AreaHeader(area.name, area.lastPerformed)
+                                AreaHeader(
+                                    area.name,
+                                    area.lastPerformed,
+                                    onAddExercise = { vm.promptAddExercise(area.id) },
+                                )
                             }
                             for (exercise in area.exercises) {
                                 val rows = if (showArchived) exercise.setRows
@@ -188,6 +193,24 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
             onConfirm = { vm.saveRename(d.exerciseId, it) },
             onDismiss = vm::dismissDialog,
         )
+        TreeViewModel.RowDialog.AddCategory -> TextFieldDialog(
+            title = "New muscle group",
+            initial = "",
+            onConfirm = { vm.addCategory(it) },
+            onDismiss = vm::dismissDialog,
+        )
+        is TreeViewModel.RowDialog.AddArea -> TextFieldDialog(
+            title = "New area",
+            initial = "",
+            onConfirm = { vm.addArea(d.categoryId, it) },
+            onDismiss = vm::dismissDialog,
+        )
+        is TreeViewModel.RowDialog.AddExercise -> TextFieldDialog(
+            title = "New exercise",
+            initial = "",
+            onConfirm = { vm.addExercise(d.areaId, it) },
+            onDismiss = vm::dismissDialog,
+        )
         null -> Unit
     }
 }
@@ -195,13 +218,13 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
 // ---- Headers (no folding; hierarchy conveyed by colour + indent) ---------
 
 @Composable
-private fun CategoryHeader(name: String) {
+private fun CategoryHeader(name: String, onAddArea: () -> Unit) {
     // Sticky + opaque so the current category stays visible while scrolling.
     Surface(color = MaterialTheme.colorScheme.primaryContainer) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+                .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -209,18 +232,34 @@ private fun CategoryHeader(name: String) {
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.weight(1f),
             )
+            AddButton(tint = MaterialTheme.colorScheme.onPrimaryContainer, onClick = onAddArea)
         }
     }
 }
 
+/** A small "+" affordance used on headers to add a child (area / exercise / category). */
 @Composable
-private fun AreaHeader(name: String, date: LocalDate?) {
+private fun AddButton(tint: Color, onClick: () -> Unit) {
+    Text(
+        text = "+",
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Bold,
+        color = tint.copy(alpha = 0.8f),
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 1.dp),
+    )
+}
+
+@Composable
+private fun AreaHeader(name: String, date: LocalDate?, onAddExercise: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .padding(start = 14.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+            .padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -237,6 +276,7 @@ private fun AreaHeader(name: String, date: LocalDate?) {
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        AddButton(tint = MaterialTheme.colorScheme.primary, onClick = onAddExercise)
     }
 }
 
@@ -313,7 +353,7 @@ private fun SetRowLine(
             // Fixed width so the set values line up across an exercise's rows.
             Box(
                 modifier = Modifier
-                    .width(120.dp)
+                    .width(150.dp)
                     .combinedClickable(onClick = {}, onLongClick = onLongPress)
                     .padding(vertical = 5.dp),
             ) {
@@ -477,12 +517,12 @@ private fun FlagCell(flag: Flag, dim: Boolean, onClick: () -> Unit) {
     }
     Text(
         text = glyph,
-        fontSize = 14.sp,
+        fontSize = 18.sp,
         fontWeight = FontWeight.Bold,
         color = if (dim) color.copy(alpha = 0.4f) else color,
         modifier = Modifier
             .clickable(onClick = onClick)
-            .width(20.dp),
+            .width(24.dp),
     )
 }
 
@@ -558,6 +598,7 @@ private fun TopBar(
     showArchived: Boolean,
     onToggleArchived: (Boolean) -> Unit,
     onExport: () -> Unit,
+    onAddCategory: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -567,6 +608,12 @@ private fun TopBar(
     ) {
         Text("LiftLog", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.weight(1f))
+        Text(
+            "+ Group",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable(onClick = onAddCategory).padding(horizontal = 8.dp),
+        )
         Text(
             "Export",
             fontSize = 13.sp,
