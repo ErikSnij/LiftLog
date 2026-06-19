@@ -25,6 +25,16 @@ internal fun formatDate(date: LocalDate?): String {
     else "%s %02d %d".format(mon, date.dayOfMonth, date.year)
 }
 
+/** Just the lowercase 3-letter month + day, e.g. "jun 05" (never includes the year). */
+internal fun formatMonthDay(date: LocalDate): String {
+    val mon = date.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH).lowercase()
+    return "%s %02d".format(mon, date.dayOfMonth)
+}
+
+/** The year to show beside a date when it predates the current year (signals "old"), else null. */
+internal fun olderYear(date: LocalDate?): Int? =
+    if (date != null && date.year < LocalDate.now().year) date.year else null
+
 /** Epley estimated 1RM = weight × (1 + reps / 30). Needs both values present. */
 internal fun epley(reps: Float?, weight: Float?): Float? =
     if (reps != null && weight != null) weight * (1f + reps / 30f) else null

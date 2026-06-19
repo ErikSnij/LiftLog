@@ -109,12 +109,12 @@ fun WheelPicker(
     }
 }
 
-/** Shared value domain for reps & weight wheels: a leading null (—/BW) then 0..[max] in 0.5 steps. */
-fun wheelValues(max: Float): List<Float?> {
-    val steps = (max / 0.5f).toInt()
+/** Value domain for a wheel: a leading null (—/BW) then 0..[max] in [step] increments. */
+fun wheelValues(max: Float, step: Float = 0.5f): List<Float?> {
+    val steps = (max / step).toInt()
     return buildList(steps + 2) {
         add(null)
-        for (i in 0..steps) add(i * 0.5f)
+        for (i in 0..steps) add(i * step)
     }
 }
 

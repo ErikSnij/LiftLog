@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -66,7 +67,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -504,13 +508,35 @@ private fun SetRowLine(
                     }
                 }
 
-                // Reps × weight sit right next to the name.
-                Text(
-                    text = formatValue(shownReps, shownWeight),
-                    fontSize = 13.sp,
-                    color = baseColor,
-                    modifier = Modifier.clickable(onClick = onValueTap),
-                )
+                // Reps × weight sit in a fixed-width column so the flag, graph icon
+                // and date stay aligned across rows regardless of value/year width.
+                Box(modifier = Modifier.width(84.dp), contentAlignment = Alignment.CenterStart) {
+                    if (shownReps == null && shownWeight == null) {
+                        // Empty: an inviting outlined placeholder instead of a bare dash.
+                        Text(
+                            text = "reps × wt",
+                            fontSize = 11.sp,
+                            color = mutedColor,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .border(
+                                    1.dp,
+                                    mutedColor.copy(alpha = 0.4f),
+                                    RoundedCornerShape(6.dp),
+                                )
+                                .clickable(onClick = onValueTap)
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    } else {
+                        Text(
+                            text = formatValue(shownReps, shownWeight),
+                            fontSize = 13.sp,
+                            color = baseColor,
+                            maxLines = 1,
+                            modifier = Modifier.clickable(onClick = onValueTap),
+                        )
+                    }
+                }
                 // ± flag sits right next to the reps × weight.
                 FlagCell(row.flag, dim = row.archived, onClick = onFlagTap)
 
@@ -558,8 +584,26 @@ private fun SetRowLine(
                             )
                         }
                     } else {
+                        // Old dates (previous years) show the year smaller + greyer to
+                        // signal "this is stale" without hogging horizontal space.
+                        val dateLabel = buildAnnotatedString {
+                            if (row.date == null) {
+                                append("—")
+                            } else {
+                                append(formatMonthDay(row.date))
+                                olderYear(row.date)?.let { year ->
+                                    append(" ")
+                                    withStyle(
+                                        SpanStyle(
+                                            fontSize = 9.sp,
+                                            color = mutedColor.copy(alpha = 0.6f),
+                                        ),
+                                    ) { append(year.toString()) }
+                                }
+                            }
+                        }
                         Text(
-                            text = formatDate(row.date),
+                            text = dateLabel,
                             fontSize = 12.sp,
                             color = mutedColor,
                             maxLines = 1,
@@ -646,7 +690,7 @@ private fun ValueWheels(
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
 ) {
-    val repsValues = remember { wheelValues(60f) }
+    val repsValues = remember { wheelValues(60f, step = 1f) }
     val weightValues = remember { wheelValues(300f) }
     // Swallow stray taps so they don't bubble up and cancel the edit.
     Row(

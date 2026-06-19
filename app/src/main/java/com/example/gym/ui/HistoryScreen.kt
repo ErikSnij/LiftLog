@@ -17,6 +17,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,8 +64,10 @@ fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modif
 
     var metric by remember { mutableStateOf(Metric.WEIGHT) }
     var draft by remember { mutableStateOf<LogEntryEntity?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize()) {
         // Top bar
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
@@ -104,8 +110,18 @@ fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modif
                     draft = null
                 },
                 onDelete = {
-                    scope.launch { dao.deleteLogEntry(d.id) }
+                    val deleted = d
                     draft = null
+                    scope.launch {
+                        dao.deleteLogEntry(deleted.id)
+                        val res = snackbarHostState.showSnackbar(
+                            message = "Entry deleted",
+                            actionLabel = "Undo",
+                            duration = SnackbarDuration.Short,
+                        )
+                        // Re-insert with the original id so the chart/history restore exactly.
+                        if (res == SnackbarResult.ActionPerformed) dao.insertLogEntry(deleted)
+                    }
                 },
                 onCancel = { draft = null },
             )
@@ -124,6 +140,8 @@ fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modif
                 EntryRow(entry, selected = draft?.id == entry.id) { draft = entry }
             }
         }
+    }
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -291,7 +309,7 @@ private fun EntryEditor(
     onDelete: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val repsValues = remember { wheelValues(60f) }
+    val repsValues = remember { wheelValues(60f, step = 1f) }
     val weightValues = remember { wheelValues(300f) }
     Column(
         modifier = Modifier
