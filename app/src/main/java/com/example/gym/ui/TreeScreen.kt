@@ -192,6 +192,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                                         RowMenu(
                                             expanded = vm.menuForSetRow == row.id,
                                             archived = row.archived,
+                                            isFirstRow = index == 0,
                                             onDismiss = vm::closeMenu,
                                             onEditNote = {
                                                 vm.showDialog(TreeViewModel.RowDialog.EditNote(row.id, row.note))
@@ -707,6 +708,7 @@ private fun FlagCell(flag: Flag, dim: Boolean, onClick: () -> Unit) {
 private fun RowMenu(
     expanded: Boolean,
     archived: Boolean,
+    isFirstRow: Boolean,
     onDismiss: () -> Unit,
     onEditNote: () -> Unit,
     onRename: () -> Unit,
@@ -724,14 +726,19 @@ private fun RowMenu(
             DropdownMenuItem(text = { Text("Rename exercise") }, onClick = onRename)
             DropdownMenuItem(text = { Text("Add set row") }, onClick = onAddSetRow)
             DropdownMenuItem(text = { Text("Archive") }, onClick = onArchive)
-            DropdownMenuItem(
-                text = { Text("Delete row", color = MaterialTheme.colorScheme.error) },
-                onClick = onDelete,
-            )
-            DropdownMenuItem(
-                text = { Text("Delete exercise", color = MaterialTheme.colorScheme.error) },
-                onClick = onDeleteExercise,
-            )
+            // The name-bearing first row deletes the whole exercise; repeated rows
+            // below it delete just that individual row.
+            if (isFirstRow) {
+                DropdownMenuItem(
+                    text = { Text("Delete exercise", color = MaterialTheme.colorScheme.error) },
+                    onClick = onDeleteExercise,
+                )
+            } else {
+                DropdownMenuItem(
+                    text = { Text("Delete row", color = MaterialTheme.colorScheme.error) },
+                    onClick = onDelete,
+                )
+            }
         }
     }
 }
