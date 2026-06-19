@@ -22,11 +22,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -75,6 +76,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -830,19 +832,46 @@ private fun TextFieldDialog(
     onDismiss: () -> Unit,
 ) {
     var text by remember { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = false,
-            )
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 4.dp,
+            shadowElevation = 12.dp,
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = false,
+                    shape = RoundedCornerShape(14.dp),
+                    placeholder = {
+                        Text("Type here…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focus),
+                )
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = { onConfirm(text) },
+                        shape = RoundedCornerShape(12.dp),
+                    ) { Text("Save") }
+                }
+            }
+        }
+    }
 }
 
 /** Build the export JSON, write to cache, and fire a share chooser. */
@@ -937,20 +966,30 @@ private fun AppMenu(
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(22.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 2.dp,
-        shadowElevation = 10.dp,
-        modifier = Modifier.width(248.dp),
+        shadowElevation = 14.dp,
+        modifier = Modifier.width(268.dp),
     ) {
+        Text(
+            text = "LIFTLOG",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.5.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 22.dp, top = 12.dp, bottom = 2.dp),
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .clickable(onClick = onExport)
-                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ExportGlyph(MaterialTheme.colorScheme.primary)
+            IconChip { ExportGlyph(it) }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("Export data", fontSize = 14.sp, fontWeight = FontWeight.Medium)
@@ -961,18 +1000,16 @@ private fun AppMenu(
                 )
             }
         }
-        HorizontalDivider(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .clickable { onToggleArchived(!showArchived) }
-                .padding(start = 16.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
+                .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ArchiveGlyph(MaterialTheme.colorScheme.primary)
+            IconChip { ArchiveGlyph(it) }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("Show archived", fontSize = 14.sp, fontWeight = FontWeight.Medium)
@@ -985,9 +1022,24 @@ private fun AppMenu(
             Switch(
                 checked = showArchived,
                 onCheckedChange = onToggleArchived,
-                modifier = Modifier.scale(0.78f),
+                modifier = Modifier.scale(0.72f),
             )
         }
+        Spacer(Modifier.height(6.dp))
+    }
+}
+
+/** A round tinted background behind a small line-drawn glyph, used in the app menu. */
+@Composable
+private fun IconChip(glyph: @Composable (Color) -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        glyph(MaterialTheme.colorScheme.onPrimaryContainer)
     }
 }
 
