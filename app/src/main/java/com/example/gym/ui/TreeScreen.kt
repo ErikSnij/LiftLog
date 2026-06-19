@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -124,12 +124,17 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                             for (exercise in area.exercises) {
                                 val rows = if (showArchived) exercise.setRows
                                 else exercise.setRows.filter { !it.archived }
-                                item(key = exerciseKey(exercise.id)) {
-                                    ExerciseHeader(exercise.name, exercise.lastPerformed)
+                                // An exercise with no visible rows still shows its name.
+                                if (rows.isEmpty()) {
+                                    item(key = exerciseKey(exercise.id)) {
+                                        ExerciseHeader(exercise.name, exercise.lastPerformed)
+                                    }
                                 }
-                                items(rows, key = { "S${it.id}" }) { row ->
+                                itemsIndexed(rows, key = { _, it -> "S${it.id}" }) { index, row ->
                                     Box {
                                         SetRowLine(
+                                            // Name shows on the first row only; the rest wrap.
+                                            exerciseName = if (index == 0) exercise.name else null,
                                             row = row,
                                             edit = edit?.takeIf { it.setRowId == row.id },
                                             onValueTap = { vm.openWheels(row.id, row.reps, row.weight) },
@@ -269,6 +274,7 @@ private fun ExerciseHeader(name: String, date: LocalDate?) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SetRowLine(
+    exerciseName: String?,
     row: SetRowUi,
     edit: TreeViewModel.EditState?,
     onValueTap: () -> Unit,
@@ -305,10 +311,30 @@ private fun SetRowLine(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 28.dp, end = 12.dp, top = 3.dp, bottom = 3.dp),
+                .padding(start = 22.dp, end = 12.dp, top = 3.dp, bottom = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            // Exercise name on the left (first row only); long-press → actions menu.
+            // It takes the flexible space so the values are pushed to the right.
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                    .padding(vertical = 5.dp),
+            ) {
+                if (exerciseName != null) {
+                    Text(
+                        text = exerciseName,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = baseColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
             if (edit?.showWheels == true) {
                 ValueWheels(
                     reps = edit.reps,
@@ -322,20 +348,11 @@ private fun SetRowLine(
                     fontSize = 13.sp,
                     fontWeight = if (edit != null) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (edit != null) MaterialTheme.colorScheme.primary else baseColor,
-                    modifier = Modifier
-                        .width(96.dp)
-                        .clickable(onClick = onValueTap),
+                    modifier = Modifier.clickable(onClick = onValueTap),
                 )
                 // ± flag sits right next to the reps × weight.
                 FlagCell(row.flag, dim = row.archived, onClick = onFlagTap)
             }
-
-            // Flexible gap: long-press → actions menu (tap does nothing).
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .combinedClickable(onClick = {}, onLongClick = onLongPress),
-            ) { Spacer(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
 
             // Graph icon opens the history chart for this row.
             GraphIcon(tint = mutedColor, onClick = onHistory)
