@@ -1,0 +1,1615 @@
+{
+  "referenceYear": 2026,
+  "categories": [
+    {
+      "name": "Upper",
+      "areas": [
+        {
+          "name": "Chest",
+          "exercises": [
+            {
+              "name": "Bench press",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 1.0,
+                    "weight": 120.0,
+                    "date": "2026-06-05"
+                  }
+                },
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 1.0,
+                    "weight": 117.5,
+                    "date": "2026-02-02"
+                  }
+                },
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 6.0,
+                    "weight": 100.0,
+                    "date": "2026-05-03"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Db bench",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 38.0,
+                    "date": "2026-04-04"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Machine press",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 6.0,
+                    "weight": 107.0,
+                    "date": "2026-02-07"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Lever bench",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 5.0,
+                    "weight": 130.0,
+                    "date": "2026-07-13"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Cable",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.0,
+                    "weight": 28.0,
+                    "date": "2026-05-22"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Fly chest",
+          "exercises": [
+            {
+              "name": "Chest fly",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 28.0,
+                    "date": "2026-01-04"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Fly wide machine",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 12.0,
+                    "weight": 134.0,
+                    "date": "2026-06-16"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Upper chest",
+          "exercises": [
+            {
+              "name": "Bench press",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 10.0,
+                    "weight": 60.0,
+                    "date": "2026-02-03"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DB press",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 9.0,
+                    "weight": 28.0,
+                    "date": "2026-11-14"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Smith",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.0,
+                    "weight": 60.0,
+                    "date": "2026-04-16"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Cable pullforward",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.0,
+                    "weight": 17.0,
+                    "date": "2026-01-15"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Cable pulldiagonal",
+              "setRows": [
+                {
+                  "note": "stack equiv. 24.3",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 15.8,
+                    "date": "2026-08-26"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Lever",
+              "setRows": [
+                {
+                  "note": "wide grip, seat not too high cause handle needs to be level with shoulder",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.5,
+                    "weight": 70.0,
+                    "date": "2026-03-12"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Lats",
+          "exercises": [
+            {
+              "name": "Pulldown",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.0,
+                    "weight": 113.0,
+                    "date": "2026-06-09"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Pullups",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 18.0,
+                    "weight": null,
+                    "date": "2026-11-05"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Weighted pullups",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 5.0,
+                    "weight": 40.0,
+                    "date": "2026-04-14"
+                  }
+                },
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.0,
+                    "weight": 30.0,
+                    "date": "2026-06-15"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "One-armed pull",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 23.8,
+                    "date": "2026-01-02"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Serratus anterior",
+          "exercises": [
+            {
+              "name": "Elbow pushup",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.0,
+                    "weight": 30.0,
+                    "date": "2026-01-29"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Row",
+          "exercises": [
+            {
+              "name": "Bent over row",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.0,
+                    "weight": 80.0,
+                    "date": "2026-08-16"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Cable",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 9.0,
+                    "weight": 79.0,
+                    "date": "2026-04-21"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Lever",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.0,
+                    "weight": 90.0,
+                    "date": "2026-05-25"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Tbar row",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 80.0,
+                    "date": "2026-02-28"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Traps & rear",
+          "exercises": [
+            {
+              "name": "Lever",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 90.0,
+                    "date": "2026-04-08"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Traps row - Upper",
+          "exercises": [
+            {
+              "name": "Lu cable fly",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.0,
+                    "weight": 6.8,
+                    "date": "2026-10-21"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Lu fly",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 12.0,
+                    "weight": 5.0,
+                    "date": "2026-11-14"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dumbbell shrug",
+              "setRows": [
+                {
+                  "note": "incl.3",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 15.0,
+                    "weight": 30.0,
+                    "date": "2026-06-15"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Smith shrug",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 12.0,
+                    "weight": 45.0,
+                    "date": "2026-04-24"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Lever",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 10.0,
+                    "weight": 100.0,
+                    "date": "2026-04-14"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Traps row - Mid",
+          "exercises": [
+            {
+              "name": "Machine",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.0,
+                    "weight": 73.0,
+                    "date": "2026-06-07"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "T-bar row",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 55.0,
+                    "date": "2026-02-04"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dumbbell shrug",
+              "setRows": [
+                {
+                  "note": "incl.2",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 14.0,
+                    "weight": 30.0,
+                    "date": "2026-01-17"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DB bench",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 13.0,
+                    "weight": 30.0,
+                    "date": "2026-03-18"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Lever",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 10.0,
+                    "weight": 80.0,
+                    "date": "2026-04-03"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Cable wide grip",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.0,
+                    "weight": 66.0,
+                    "date": "2026-07-27"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "T-bar shrug",
+              "setRows": [
+                {
+                  "note": "side grip",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 14.0,
+                    "weight": 40.0,
+                    "date": "2026-05-25"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Front delts",
+          "exercises": [
+            {
+              "name": "OHP",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 3.0,
+                    "weight": 65.0,
+                    "date": "2026-05-06"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "seated OHP",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 3.0,
+                    "weight": 50.0,
+                    "date": "2026-02-03"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Shoulder bar press",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 60.0,
+                    "date": "2026-01-26"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Shoulder press machine",
+              "setRows": [
+                {
+                  "note": "date in source was 'm14'",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 16.0,
+                    "weight": 45.0,
+                    "date": "2026-03-14"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DB raise",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 28.0,
+                    "date": "2026-06-15"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Lever",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 6.0,
+                    "weight": 80.0,
+                    "date": "2026-06-08"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Handstand press",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 6.0,
+                    "weight": null,
+                    "date": "2026-03-23"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Medior delts",
+          "exercises": [
+            {
+              "name": "Cable fly",
+              "setRows": [
+                {
+                  "note": "pos. 5; 8 on other machine",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.5,
+                    "weight": 14.0,
+                    "date": "2026-06-16"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Machine fly",
+              "setRows": [
+                {
+                  "note": "date in source was 'a20'",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 12.0,
+                    "weight": 82.0,
+                    "date": "2026-04-20"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Rear delts",
+          "exercises": [
+            {
+              "name": "One armed cable fly",
+              "setRows": [
+                {
+                  "note": "stack equiv. 14",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 14.0,
+                    "weight": 9.0,
+                    "date": "2026-04-03"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Machine fly",
+              "setRows": [
+                {
+                  "note": "pile of money",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 12.0,
+                    "weight": 86.0,
+                    "date": "2026-05-14"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Cable fly",
+              "setRows": [
+                {
+                  "note": "'4de'",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 9.0,
+                    "weight": 4.0,
+                    "date": "2026-06-15"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "One-armed machine fly",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 66.0,
+                    "date": "2026-03-16"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Archer pull",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.0,
+                    "weight": 23.8,
+                    "date": "2026-08-01"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Biceps",
+          "exercises": [
+            {
+              "name": "DB curl",
+              "setRows": [
+                {
+                  "note": "neutral",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 9.0,
+                    "weight": 14.0,
+                    "date": "2026-09-14"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DB curl 45Â° incline",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.0,
+                    "weight": 14.0,
+                    "date": "2026-11-08"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Bar curl",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 6.0,
+                    "weight": 45.0,
+                    "date": "2026-04-07"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Preach",
+              "setRows": [
+                {
+                  "note": "weighted; +10",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 6.0,
+                    "weight": 54.0,
+                    "date": "2026-06-07"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Preach hammer",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.0,
+                    "weight": 59.0,
+                    "date": "2026-05-21"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Preach bar",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 45.0,
+                    "date": "2026-08-12"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Bayesian curl",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 10.0,
+                    "weight": 14.7,
+                    "date": "2026-06-16"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Triceps",
+          "exercises": [
+            {
+              "name": "Cable pushdown",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 9.0,
+                    "weight": 36.0,
+                    "date": "2026-06-07"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Cable overhead zilver",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 10.0,
+                    "weight": 59.0,
+                    "date": "2026-05-25"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Cable overhead zwart",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 9.0,
+                    "weight": 29.3,
+                    "date": "2026-03-19"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Cable overhead soepel",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 9.0,
+                    "weight": 32.9,
+                    "date": "2026-05-18"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dip machine",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 9.0,
+                    "weight": 125.0,
+                    "date": "2026-03-30"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dip machine oude",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 10.0,
+                    "weight": 73.0,
+                    "date": "2026-12-13"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "JM press",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 13.0,
+                    "weight": 40.0,
+                    "date": "2026-07-26"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Weighted dips",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.0,
+                    "weight": 30.0,
+                    "date": "2026-06-15"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Forearms",
+          "exercises": [
+            {
+              "name": "DB curl in",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 13.0,
+                    "weight": 16.0,
+                    "date": "2026-03-12"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DB curl out",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.0,
+                    "weight": 8.0,
+                    "date": "2026-03-12"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Reverse curls",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 9.0,
+                    "weight": 30.0,
+                    "date": "2026-03-14"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Farmer's walk",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 2.0,
+                    "weight": 35.0,
+                    "date": "2026-04-04"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Abs",
+          "exercises": [
+            {
+              "name": "Crunch machine",
+              "setRows": [
+                {
+                  "note": "put weight down to breathe",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 16.0,
+                    "weight": 100.0,
+                    "date": "2026-08-01"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Sit ups",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": null
+                }
+              ]
+            },
+            {
+              "name": "Leg raise",
+              "setRows": [
+                {
+                  "note": "tot het pijn doet",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Erectors",
+          "exercises": [
+            {
+              "name": "Back extension",
+              "setRows": [
+                {
+                  "note": "+2*.5",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 90.0,
+                    "date": "2026-03-18"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Lower",
+      "areas": [
+        {
+          "name": "Legs",
+          "exercises": [
+            {
+              "name": "Deadlift",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 10.0,
+                    "weight": 110.0,
+                    "date": "2026-05-21"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Leg press (voor)",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 6.0,
+                    "weight": 113.0,
+                    "date": "2026-07-20"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Leg press (achter)",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 6.0,
+                    "weight": 145.0,
+                    "date": "2026-08-07"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Quads",
+          "exercises": [
+            {
+              "name": "Squats",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 110.0,
+                    "date": "2026-02-11"
+                  }
+                },
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.0,
+                    "weight": 120.0,
+                    "date": "2026-03-30"
+                  }
+                },
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 5.0,
+                    "weight": 130.0,
+                    "date": "2026-04-09"
+                  }
+                },
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 3.0,
+                    "weight": 140.0,
+                    "date": "2026-04-26"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Squat machine",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 130.0,
+                    "date": "2026-03-14"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Squat machine back",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 5.0,
+                    "weight": 100.0,
+                    "date": "2026-02-15"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Front squat",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.0,
+                    "weight": 70.0,
+                    "date": "2026-11-05"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Overhead squat",
+              "setRows": [
+                {
+                  "note": "name only, no data",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": null
+                }
+              ]
+            },
+            {
+              "name": "Leg extension",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 13.0,
+                    "weight": 93.0,
+                    "date": "2026-06-09"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Single leg standing lunge",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 13.0,
+                    "weight": 40.0,
+                    "date": "2026-10-28"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Pistol squats supported",
+              "setRows": [
+                {
+                  "note": "3rm",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": null
+                }
+              ]
+            },
+            {
+              "name": "Slow squats",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 5.0,
+                    "weight": 90.0,
+                    "date": "2026-08-17"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Slow single-leg press",
+              "setRows": [
+                {
+                  "note": "weight uncertain '?'",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 8.0,
+                    "weight": 35.0,
+                    "date": "2026-06-11"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Slow leg extension",
+              "setRows": [
+                {
+                  "note": "reps unknown",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": null,
+                    "weight": 45.0,
+                    "date": "2026-06-24"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Hamstrings",
+          "exercises": [
+            {
+              "name": "SDDL",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 11.0,
+                    "weight": 130.0,
+                    "date": "2026-05-21"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Leg curl",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 9.0,
+                    "weight": 93.0,
+                    "date": "2026-06-09"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Calves",
+          "exercises": [
+            {
+              "name": "Smith",
+              "setRows": [
+                {
+                  "note": "'ex'",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.5,
+                    "weight": 60.0,
+                    "date": "2026-03-31"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Calf press",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 9.0,
+                    "weight": 124.0,
+                    "date": "2026-06-09"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Leg press",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.0,
+                    "weight": 145.0,
+                    "date": "2026-08-17"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Calf extension",
+              "setRows": [
+                {
+                  "note": "no numbers",
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Glutes",
+          "exercises": [
+            {
+              "name": "Glute bridge",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 6.0,
+                    "weight": 100.0,
+                    "date": "2026-05-06"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Glute push",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 10.0,
+                    "weight": 85.0,
+                    "date": "2026-12-13"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Adductors",
+          "exercises": [
+            {
+              "name": "Machine",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 7.0,
+                    "weight": 93.0,
+                    "date": "2026-06-09"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Abductors",
+          "exercises": [
+            {
+              "name": "Lever",
+              "setRows": [
+                {
+                  "note": null,
+                  "flag": "NONE",
+                  "archived": false,
+                  "seedEntry": {
+                    "reps": 10.0,
+                    "weight": 40.0,
+                    "date": "2026-06-09"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
