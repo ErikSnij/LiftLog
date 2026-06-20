@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -566,11 +565,11 @@ private fun SetRowLine(
                     onCancel = onCancel,
                 )
             } else {
-                // Exercise name on the left (first row only); long-press → actions menu.
-                // Fixed width so the set values line up across an exercise's rows.
+                // ── Group 1: name + (reps × weight) + flag, kept tight together ──
+                // Name fixed-width (first row only) so the values line up across the rows.
                 Box(
                     modifier = Modifier
-                        .width(150.dp)
+                        .width(130.dp)
                         .combinedClickable(onClick = {}, onLongClick = onLongPress)
                         .padding(vertical = 5.dp),
                 ) {
@@ -586,110 +585,83 @@ private fun SetRowLine(
                     }
                 }
 
-                // Reps × weight sit in a fixed-width column so the flag, graph icon
-                // and date stay aligned across rows regardless of value/year width.
-                Box(modifier = Modifier.width(84.dp), contentAlignment = Alignment.CenterStart) {
-                    if (shownReps == null && shownWeight == null) {
-                        // Empty: an inviting outlined placeholder instead of a bare dash.
-                        Text(
-                            text = "reps × wt",
-                            fontSize = 11.sp,
-                            color = mutedColor,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .border(
-                                    1.dp,
-                                    mutedColor.copy(alpha = 0.4f),
-                                    RoundedCornerShape(6.dp),
-                                )
-                                .clickable(onClick = onValueTap)
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                        )
-                    } else {
-                        Text(
-                            text = formatValue(shownReps, shownWeight),
-                            fontSize = 13.sp,
-                            color = baseColor,
-                            maxLines = 1,
-                            modifier = Modifier.clickable(onClick = onValueTap),
-                        )
-                    }
+                // Reps × weight, then the ± flag immediately beside it (tight group).
+                if (shownReps == null && shownWeight == null) {
+                    // Empty: an inviting outlined placeholder instead of a bare dash.
+                    Text(
+                        text = "reps × wt",
+                        fontSize = 11.sp,
+                        color = mutedColor,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .border(1.dp, mutedColor.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                            .clickable(onClick = onValueTap)
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                } else {
+                    Text(
+                        text = formatValue(shownReps, shownWeight),
+                        fontSize = 13.sp,
+                        color = baseColor,
+                        maxLines = 1,
+                        modifier = Modifier.clickable(onClick = onValueTap),
+                    )
                 }
-                // ± flag sits right next to the reps × weight.
                 FlagCell(row.flag, dim = row.archived, onClick = onFlagTap)
 
-                // Flexible gap pushes the graph + date to the right edge; long-press here too.
+                // ── Whitespace separating the two groups (long-press = actions menu) ──
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .combinedClickable(onClick = {}, onLongClick = onLongPress),
                 ) { Spacer(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
 
-                // Graph icon opens the history chart for this row.
+                // ── Group 2: graph icon + date, kept tight together ──
                 GraphIcon(tint = mutedColor, onClick = onHistory)
 
-                // Trailing slot: a min width keeps the graph icons aligned in the common
-                // case, but it can grow so a long (old-year) date is never clipped.
-                Box(
-                    modifier = Modifier.widthIn(min = 60.dp),
-                    contentAlignment = Alignment.CenterEnd,
-                ) {
-                    if (edit?.armed == true) {
-                        // Armed by tapping the date: ✕ cancel left, ✓ confirm right.
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "✕",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable(onClick = onCancel)
-                                    .padding(horizontal = 5.dp, vertical = 4.dp),
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                text = "✓",
-                                fontSize = 19.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable(onClick = onConfirm)
-                                    .padding(horizontal = 5.dp, vertical = 4.dp),
-                            )
-                        }
-                    } else {
-                        // Old dates (previous years) show the year smaller + greyer to
-                        // signal "this is stale" without hogging horizontal space.
-                        val dateLabel = buildAnnotatedString {
-                            if (row.date == null) {
-                                append("—")
-                            } else {
-                                append(formatMonthDay(row.date))
-                                olderYear(row.date)?.let { year ->
-                                    // Compact 2-digit year (e.g. ' '25) so old dates stay narrow.
-                                    withStyle(
-                                        SpanStyle(
-                                            fontSize = 9.sp,
-                                            color = mutedColor.copy(alpha = 0.6f),
-                                        ),
-                                    ) { append(" '%02d".format(year % 100)) }
-                                }
+                if (edit?.armed == true) {
+                    // Armed by tapping the date: ✕ cancel, then ✓ confirm (check on the right).
+                    Text(
+                        text = "✕",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(onClick = onCancel)
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                    )
+                    Text(
+                        text = "✓",
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(onClick = onConfirm)
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                    )
+                } else {
+                    // Old dates (previous years) show a compact, smaller, grey year.
+                    val dateLabel = buildAnnotatedString {
+                        if (row.date == null) {
+                            append("—")
+                        } else {
+                            append(formatMonthDay(row.date))
+                            olderYear(row.date)?.let { year ->
+                                withStyle(
+                                    SpanStyle(fontSize = 9.sp, color = mutedColor.copy(alpha = 0.6f)),
+                                ) { append(" '%02d".format(year % 100)) }
                             }
                         }
-                        Text(
-                            text = dateLabel,
-                            fontSize = 12.sp,
-                            color = mutedColor,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.clickable(onClick = onDateTap),
-                        )
                     }
+                    Text(
+                        text = dateLabel,
+                        fontSize = 12.sp,
+                        color = mutedColor,
+                        maxLines = 1,
+                        modifier = Modifier.clickable(onClick = onDateTap),
+                    )
                 }
             }
         }
