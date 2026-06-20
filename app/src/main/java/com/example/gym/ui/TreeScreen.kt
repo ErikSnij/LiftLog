@@ -160,13 +160,18 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                                     vm.showDialog(TreeViewModel.RowDialog.RenameCategory(category.id, category.name))
                                 },
                                 onDelete = { vm.deleteCategory(category.id) },
+                                onMoveUp = { vm.moveCategory(category.id, -1) },
+                                onMoveDown = { vm.moveCategory(category.id, 1) },
                             )
                         }
                         for (group in category.muscleGroups) {
+                            val groupCollapsed = group.id in vm.collapsedMuscleGroups
                             item(key = muscleGroupKey(group.id)) {
                                 MuscleGroupHeader(
                                     name = group.name,
                                     date = group.lastPerformed,
+                                    collapsed = groupCollapsed,
+                                    onToggle = { vm.toggleMuscleGroup(group.id) },
                                     onAddArea = { vm.promptAddArea(group.id) },
                                     menuExpanded = vm.menuForMuscleGroup == group.id,
                                     onLongPress = { vm.openMuscleGroupMenu(group.id) },
@@ -175,13 +180,19 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                                         vm.showDialog(TreeViewModel.RowDialog.RenameMuscleGroup(group.id, group.name))
                                     },
                                     onDelete = { vm.deleteMuscleGroup(group.id) },
+                                    onMoveUp = { vm.moveMuscleGroup(group.id, -1) },
+                                    onMoveDown = { vm.moveMuscleGroup(group.id, 1) },
                                 )
                             }
+                        if (!groupCollapsed) {
                         for (area in group.areas) {
+                            val areaCollapsed = area.id in vm.collapsedAreas
                             item(key = areaKey(area.id)) {
                                 AreaHeader(
                                     name = area.name,
                                     date = area.lastPerformed,
+                                    collapsed = areaCollapsed,
+                                    onToggle = { vm.toggleArea(area.id) },
                                     onAddExercise = { vm.promptAddExercise(area.id) },
                                     menuExpanded = vm.menuForArea == area.id,
                                     onLongPress = { vm.openAreaMenu(area.id) },
@@ -190,8 +201,11 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                                         vm.showDialog(TreeViewModel.RowDialog.RenameArea(area.id, area.name))
                                     },
                                     onDelete = { vm.deleteArea(area.id) },
+                                    onMoveUp = { vm.moveArea(area.id, -1) },
+                                    onMoveDown = { vm.moveArea(area.id, 1) },
                                 )
                             }
+                            if (!areaCollapsed) {
                             for (exercise in area.exercises) {
                                 val rows = if (showArchived) exercise.setRows
                                 else exercise.setRows.filter { !it.archived }
@@ -241,7 +255,9 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                                     }
                                 }
                             }
+                            }  // if (!areaCollapsed)
                         }
+                        }  // if (!groupCollapsed)
                         }
                     }
                 }
@@ -320,6 +336,8 @@ private fun CategoryHeader(
     onDismissMenu: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
 ) {
     // Sticky + opaque so the current category stays visible while scrolling.
     Surface(color = MaterialTheme.colorScheme.primaryContainer) {
@@ -347,6 +365,8 @@ private fun CategoryHeader(
                 deleteLabel = "Delete category",
                 onRename = onRename,
                 onDelete = onDelete,
+                onMoveUp = onMoveUp,
+                onMoveDown = onMoveDown,
             )
         }
     }
@@ -358,22 +378,32 @@ private fun CategoryHeader(
 private fun MuscleGroupHeader(
     name: String,
     date: LocalDate?,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
     onAddArea: () -> Unit,
     menuExpanded: Boolean,
     onLongPress: () -> Unit,
     onDismissMenu: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
 ) {
     Box {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f))
-                .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
                 .padding(start = 16.dp, end = 4.dp, top = 5.dp, bottom = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Text(
+                text = if (collapsed) "▸" else "▾",
+                fontSize = 18.sp,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.55f),
+                modifier = Modifier.padding(end = 6.dp),
+            )
             Text(
                 text = name,
                 fontSize = 13.sp,
@@ -397,11 +427,13 @@ private fun MuscleGroupHeader(
             deleteLabel = "Delete muscle group",
             onRename = onRename,
             onDelete = onDelete,
+            onMoveUp = onMoveUp,
+            onMoveDown = onMoveDown,
         )
     }
 }
 
-/** Long-press menu shared by the category and area headers (rename + delete). */
+/** Long-press menu shared by category, muscle group, and area headers. */
 @Composable
 private fun HeaderMenu(
     expanded: Boolean,
@@ -410,8 +442,16 @@ private fun HeaderMenu(
     deleteLabel: String,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        onMoveUp?.let { action ->
+            DropdownMenuItem(text = { Text("Move up") }, onClick = { onDismiss(); action() })
+        }
+        onMoveDown?.let { action ->
+            DropdownMenuItem(text = { Text("Move down") }, onClick = { onDismiss(); action() })
+        }
         DropdownMenuItem(text = { Text(renameLabel) }, onClick = onRename)
         DropdownMenuItem(
             text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
@@ -439,22 +479,32 @@ private fun AddButton(tint: Color, onClick: () -> Unit) {
 private fun AreaHeader(
     name: String,
     date: LocalDate?,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
     onAddExercise: () -> Unit,
     menuExpanded: Boolean,
     onLongPress: () -> Unit,
     onDismissMenu: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
 ) {
     Box {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
                 .padding(start = 22.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Text(
+                text = if (collapsed) "▸" else "▾",
+                fontSize = 18.sp,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+                modifier = Modifier.padding(end = 5.dp),
+            )
             Text(
                 text = name,
                 fontSize = 12.5.sp,
@@ -478,6 +528,8 @@ private fun AreaHeader(
             deleteLabel = "Delete muscle",
             onRename = onRename,
             onDelete = onDelete,
+            onMoveUp = onMoveUp,
+            onMoveDown = onMoveDown,
         )
     }
 }
@@ -585,6 +637,7 @@ private fun SetRowLine(
                     }
                 }
 
+                Spacer(Modifier.width(12.dp))
                 // Reps × weight, then the ± flag immediately beside it (tight group).
                 if (shownReps == null && shownWeight == null) {
                     // Empty: an inviting outlined placeholder instead of a bare dash.

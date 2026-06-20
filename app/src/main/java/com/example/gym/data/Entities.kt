@@ -14,6 +14,7 @@ enum class Flag { NONE, UP, DOWN }
 data class CategoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
+    @ColumnInfo(name = "sort_order") val sortOrder: Int = 0,
 )
 
 /** Muscle group (e.g. Chest, Arms) — sits between a category (UPPER/LOWER) and a muscle (area). */
@@ -33,6 +34,7 @@ data class MuscleGroupEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val categoryId: Long,
     val name: String,
+    @ColumnInfo(name = "sort_order") val sortOrder: Int = 0,
 )
 
 /** A muscle (e.g. Upper chest, Biceps). Historically called "area"; now nested under a muscle group. */
@@ -52,6 +54,7 @@ data class AreaEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val muscleGroupId: Long,
     val name: String,
+    @ColumnInfo(name = "sort_order") val sortOrder: Int = 0,
 )
 
 @Entity(

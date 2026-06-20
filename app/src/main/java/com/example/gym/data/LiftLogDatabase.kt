@@ -15,7 +15,7 @@ import androidx.room.TypeConverters
         SetRowEntity::class,
         LogEntryEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -32,7 +32,7 @@ abstract class LiftLogDatabase : RoomDatabase() {
                     context.applicationContext,
                     LiftLogDatabase::class.java,
                     "liftlog.db",
-                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
             }
     }
 }

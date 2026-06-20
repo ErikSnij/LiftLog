@@ -87,5 +87,20 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/**
+ * v2 → v3: add sort_order column to category, muscle_group, area so the user can manually
+ * reorder them. Initialised to the row's id so existing insertion order is preserved.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `category` ADD COLUMN `sort_order` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("UPDATE `category` SET `sort_order` = id")
+        db.execSQL("ALTER TABLE `muscle_group` ADD COLUMN `sort_order` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("UPDATE `muscle_group` SET `sort_order` = id")
+        db.execSQL("ALTER TABLE `area` ADD COLUMN `sort_order` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("UPDATE `area` SET `sort_order` = id")
+    }
+}
+
 /** Escape single quotes for inline SQL literals (none of our names use them, but be safe). */
 private fun String.sqlEscape(): String = replace("'", "''")

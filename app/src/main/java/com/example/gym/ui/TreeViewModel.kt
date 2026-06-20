@@ -119,7 +119,8 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         val areasByMuscleGroup = areas.groupBy { it.muscleGroupId }
         val muscleGroupsByCategory = muscleGroups.groupBy { it.categoryId }
 
-        // Within each level, sort children by most-recent activity (never-performed last).
+        // Categories, muscle groups, and muscles keep their user-defined sort_order (from DB).
+        // Only exercises are sorted by most-recent activity (never-performed last).
         val categoryUis = categories.map { category ->
             val groupUis = muscleGroupsByCategory[category.id].orEmpty().map { group ->
                 val areaUis = areasByMuscleGroup[group.id].orEmpty().map { area ->
@@ -140,9 +141,9 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                         ExerciseUi(exercise.id, exercise.name, exLastById[exercise.id], rowUis)
                     }.sortedWith(compareByDescending { it.lastPerformed })
                     AreaUi(area.id, area.name, areaLastById[area.id], exerciseUis)
-                }.sortedWith(compareByDescending { it.lastPerformed })
+                }
                 MuscleGroupUi(group.id, group.name, mgLastById[group.id], areaUis)
-            }.sortedWith(compareByDescending { it.lastPerformed })
+            }
             CategoryUi(category.id, category.name, catLastById[category.id], groupUis)
         }
 
@@ -164,6 +165,62 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateShowArchived(value: Boolean) {
         showArchived = value
+    }
+
+    // ---- Collapse state (in-memory; resets on restart) -------------------
+
+    var collapsedMuscleGroups by mutableStateOf<Set<Long>>(emptySet())
+        private set
+    var collapsedAreas by mutableStateOf<Set<Long>>(emptySet())
+        private set
+
+    fun toggleMuscleGroup(id: Long) {
+        collapsedMuscleGroups = if (id in collapsedMuscleGroups) collapsedMuscleGroups - id
+        else collapsedMuscleGroups + id
+    }
+
+    fun toggleArea(id: Long) {
+        collapsedAreas = if (id in collapsedAreas) collapsedAreas - id
+        else collapsedAreas + id
+    }
+
+    // ---- Move sections (swap sort_order of adjacent siblings) ------------
+
+    fun moveCategory(id: Long, direction: Int) {
+        val cats = tree.value.categories
+        val idx = cats.indexOfFirst { it.id == id }.takeIf { it >= 0 } ?: return
+        val other = idx + direction
+        if (other !in cats.indices) return
+        viewModelScope.launch {
+            val newOrder = cats.toMutableList().also { it.add(other, it.removeAt(idx)) }
+            newOrder.forEachIndexed { i, c -> dao.updateCategorySortOrder(c.id, i) }
+        }
+    }
+
+    fun moveMuscleGroup(id: Long, direction: Int) {
+        val groups = tree.value.categories
+            .firstOrNull { it.muscleGroups.any { g -> g.id == id } }
+            ?.muscleGroups ?: return
+        val idx = groups.indexOfFirst { it.id == id }.takeIf { it >= 0 } ?: return
+        val other = idx + direction
+        if (other !in groups.indices) return
+        viewModelScope.launch {
+            val newOrder = groups.toMutableList().also { it.add(other, it.removeAt(idx)) }
+            newOrder.forEachIndexed { i, g -> dao.updateMuscleGroupSortOrder(g.id, i) }
+        }
+    }
+
+    fun moveArea(id: Long, direction: Int) {
+        val areas = tree.value.categories.flatMap { it.muscleGroups }
+            .firstOrNull { it.areas.any { a -> a.id == id } }
+            ?.areas ?: return
+        val idx = areas.indexOfFirst { it.id == id }.takeIf { it >= 0 } ?: return
+        val other = idx + direction
+        if (other !in areas.indices) return
+        viewModelScope.launch {
+            val newOrder = areas.toMutableList().also { it.add(other, it.removeAt(idx)) }
+            newOrder.forEachIndexed { i, a -> dao.updateAreaSortOrder(a.id, i) }
+        }
     }
 
     // ---- Fast write loop -------------------------------------------------
@@ -337,7 +394,8 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         dialog = null
         val clean = name.trim().ifEmpty { return }
         viewModelScope.launch {
-            dao.insertCategory(com.example.gym.data.CategoryEntity(name = clean))
+            val sortOrder = tree.value.categories.size
+            dao.insertCategory(com.example.gym.data.CategoryEntity(name = clean, sortOrder = sortOrder))
         }
     }
 
@@ -345,8 +403,9 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         dialog = null
         val clean = name.trim().ifEmpty { return }
         viewModelScope.launch {
+            val sortOrder = tree.value.categories.find { it.id == categoryId }?.muscleGroups?.size ?: 0
             dao.insertMuscleGroup(
-                com.example.gym.data.MuscleGroupEntity(categoryId = categoryId, name = clean),
+                com.example.gym.data.MuscleGroupEntity(categoryId = categoryId, name = clean, sortOrder = sortOrder),
             )
         }
     }
@@ -355,7 +414,9 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         dialog = null
         val clean = name.trim().ifEmpty { return }
         viewModelScope.launch {
-            dao.insertArea(com.example.gym.data.AreaEntity(muscleGroupId = muscleGroupId, name = clean))
+            val sortOrder = tree.value.categories.flatMap { it.muscleGroups }
+                .find { it.id == muscleGroupId }?.areas?.size ?: 0
+            dao.insertArea(com.example.gym.data.AreaEntity(muscleGroupId = muscleGroupId, name = clean, sortOrder = sortOrder))
         }
     }
 

@@ -11,13 +11,13 @@ interface LiftLogDao {
 
     // ---- Tree reads ------------------------------------------------------
 
-    @Query("SELECT * FROM category ORDER BY id")
+    @Query("SELECT * FROM category ORDER BY sort_order ASC, id ASC")
     fun observeCategories(): Flow<List<CategoryEntity>>
 
-    @Query("SELECT * FROM muscle_group ORDER BY id")
+    @Query("SELECT * FROM muscle_group ORDER BY sort_order ASC, id ASC")
     fun observeMuscleGroups(): Flow<List<MuscleGroupEntity>>
 
-    @Query("SELECT * FROM area ORDER BY id")
+    @Query("SELECT * FROM area ORDER BY sort_order ASC, id ASC")
     fun observeAreas(): Flow<List<AreaEntity>>
 
     @Query("SELECT * FROM exercise ORDER BY id")
@@ -135,6 +135,15 @@ interface LiftLogDao {
     @Query("UPDATE set_row SET flag = :flag WHERE id = :setRowId")
     suspend fun updateFlag(setRowId: Long, flag: Flag)
 
+    @Query("UPDATE category SET sort_order = :order WHERE id = :id")
+    suspend fun updateCategorySortOrder(id: Long, order: Int)
+
+    @Query("UPDATE muscle_group SET sort_order = :order WHERE id = :id")
+    suspend fun updateMuscleGroupSortOrder(id: Long, order: Int)
+
+    @Query("UPDATE area SET sort_order = :order WHERE id = :id")
+    suspend fun updateAreaSortOrder(id: Long, order: Int)
+
     // ---- History screen (Phase 4) ----------------------------------------
 
     @Query("SELECT * FROM set_row WHERE id = :setRowId")
@@ -198,7 +207,7 @@ interface LiftLogDao {
     @Query("SELECT * FROM muscle_group WHERE id = :id")
     suspend fun getMuscleGroup(id: Long): MuscleGroupEntity?
 
-    @Query("SELECT * FROM area WHERE muscleGroupId = :muscleGroupId ORDER BY id")
+    @Query("SELECT * FROM area WHERE muscleGroupId = :muscleGroupId ORDER BY sort_order ASC, id ASC")
     suspend fun areasOf(muscleGroupId: Long): List<AreaEntity>
 
     @Query("DELETE FROM muscle_group WHERE id = :id")
@@ -207,7 +216,7 @@ interface LiftLogDao {
     @Query("SELECT * FROM category WHERE id = :id")
     suspend fun getCategory(id: Long): CategoryEntity?
 
-    @Query("SELECT * FROM muscle_group WHERE categoryId = :categoryId ORDER BY id")
+    @Query("SELECT * FROM muscle_group WHERE categoryId = :categoryId ORDER BY sort_order ASC, id ASC")
     suspend fun muscleGroupsOf(categoryId: Long): List<MuscleGroupEntity>
 
     @Query("DELETE FROM category WHERE id = :id")
