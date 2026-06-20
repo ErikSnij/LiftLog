@@ -45,10 +45,19 @@ archived rows. `reps`/`weight` are nullable: a null weight renders as `BW`
 On first launch the app seeds itself from `app/src/main/assets/liftlog_seed.json`
 (guarded by a category count, so it won't re-import on later launches).
 
+## Download
+
+**[⬇ Download LiftLog.apk](https://github.com/ErikSnij/LiftLog/releases/download/latest/LiftLog.apk)**
+
+The link always points to the latest signed release, rebuilt automatically on every
+push to `main` via GitHub Actions. Enable "Install unknown apps" in Android settings
+once, then install the APK directly from your browser.
+
 ## Build & run
 
 ```bash
 ./gradlew :app:installDebug      # build + install to a connected device/emulator
+./gradlew assembleRelease        # signed release APK (requires keystore.properties)
 ```
 
 Requires the Android SDK (set `sdk.dir` in `local.properties`). Built against a
