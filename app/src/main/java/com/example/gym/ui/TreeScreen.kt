@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -627,9 +628,10 @@ private fun SetRowLine(
                 // Graph icon opens the history chart for this row.
                 GraphIcon(tint = mutedColor, onClick = onHistory)
 
-                // Fixed-width trailing slot: the graph never shifts between states.
+                // Trailing slot: a min width keeps the graph icons aligned in the common
+                // case, but it can grow so a long (old-year) date is never clipped.
                 Box(
-                    modifier = Modifier.width(72.dp),
+                    modifier = Modifier.widthIn(min = 60.dp),
                     contentAlignment = Alignment.CenterEnd,
                 ) {
                     if (edit?.armed == true) {
@@ -669,13 +671,13 @@ private fun SetRowLine(
                             } else {
                                 append(formatMonthDay(row.date))
                                 olderYear(row.date)?.let { year ->
-                                    append(" ")
+                                    // Compact 2-digit year (e.g. ' '25) so old dates stay narrow.
                                     withStyle(
                                         SpanStyle(
                                             fontSize = 9.sp,
                                             color = mutedColor.copy(alpha = 0.6f),
                                         ),
-                                    ) { append(year.toString()) }
+                                    ) { append(" '%02d".format(year % 100)) }
                                 }
                             }
                         }
@@ -684,6 +686,7 @@ private fun SetRowLine(
                             fontSize = 12.sp,
                             color = mutedColor,
                             maxLines = 1,
+                            softWrap = false,
                             modifier = Modifier.clickable(onClick = onDateTap),
                         )
                     }
