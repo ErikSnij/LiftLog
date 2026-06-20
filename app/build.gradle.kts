@@ -1,9 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
 }
+
+// Read signing credentials: keystore.properties (local) → env vars (CI).
+val signingProps = Properties().also { props ->
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { props.load(it) }
+}
+fun signingProp(key: String, env: String): String =
+    signingProps.getProperty(key) ?: System.getenv(env) ?: ""
 
 android {
     namespace = "com.example.gym"
@@ -21,8 +31,18 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file(signingProp("storeFile", "KEYSTORE_PATH"))
+            storePassword = signingProp("storePassword", "KEYSTORE_STORE_PASSWORD")
+            keyAlias = signingProp("keyAlias", "KEY_ALIAS")
+            keyPassword = signingProp("keyPassword", "KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             optimization {
                 enable = false
             }
