@@ -19,13 +19,12 @@ data class ExportMuscleGroup(val name: String, val muscles: List<ExportArea>)
 data class ExportArea(val name: String, val exercises: List<ExportExercise>)
 
 @Serializable
-data class ExportExercise(val name: String, val setRows: List<ExportSetRow>)
+data class ExportExercise(val name: String, val archived: Boolean, val setRows: List<ExportSetRow>)
 
 @Serializable
 data class ExportSetRow(
     val note: String?,
     val flag: String,
-    val archived: Boolean,
     val entries: List<ExportEntry>,
 )
 
@@ -59,11 +58,11 @@ object Exporter {
                                     exercises = exercises[a.id].orEmpty().map { e ->
                                         ExportExercise(
                                             name = e.name,
+                                            archived = e.archived,
                                             setRows = setRows[e.id].orEmpty().map { sr ->
                                                 ExportSetRow(
                                                     note = sr.note,
                                                     flag = sr.flag.name,
-                                                    archived = sr.archived,
                                                     entries = entries[sr.id].orEmpty()
                                                         .sortedBy { it.date }
                                                         .map { en ->

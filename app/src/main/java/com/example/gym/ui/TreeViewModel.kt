@@ -35,6 +35,7 @@ data class ExerciseUi(
     val name: String,
     val lastPerformed: LocalDate?,
     val setRows: List<SetRowUi>,
+    val archived: Boolean = false,
 )
 
 data class AreaUi(
@@ -135,10 +136,10 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                                 flag = row.flag,
                                 date = entry?.date,
                                 hasEntry = entry != null,
-                                archived = row.archived,
+                                archived = exercise.archived,
                             )
                         }
-                        ExerciseUi(exercise.id, exercise.name, exLastById[exercise.id], rowUis)
+                        ExerciseUi(exercise.id, exercise.name, exLastById[exercise.id], rowUis, exercise.archived)
                     }.sortedWith(compareByDescending { it.lastPerformed })
                     AreaUi(area.id, area.name, areaLastById[area.id], exerciseUis)
                 }
@@ -165,6 +166,18 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateShowArchived(value: Boolean) {
         showArchived = value
+    }
+
+    // ---- Scroll position (survives navigation) ---------------------------
+
+    var savedScrollIndex by mutableStateOf(0)
+        private set
+    var savedScrollOffset by mutableStateOf(0)
+        private set
+
+    fun saveScrollPosition(index: Int, offset: Int) {
+        savedScrollIndex = index
+        savedScrollOffset = offset
     }
 
     // ---- Collapse state (in-memory; resets on restart) -------------------
@@ -266,20 +279,28 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         edit = null
     }
 
-    /** Tap the checkmark → write a new immutable LogEntry stamped today (undoable). */
+    /** Tap the checkmark → upsert today's log entry (one per day; undoable). */
     fun confirm() {
         val state = edit ?: return
         edit = null
         viewModelScope.launch {
-            val id = dao.insertLogEntry(
-                com.example.gym.data.LogEntryEntity(
-                    setRowId = state.setRowId,
-                    reps = state.reps,
-                    weight = state.weight,
-                    date = LocalDate.now(),
-                ),
-            )
-            undoRequest = UndoRequest("Logged today") { dao.deleteLogEntry(id) }
+            val today = LocalDate.now()
+            val existing = dao.getLogEntryForDate(state.setRowId, today)
+            if (existing != null) {
+                val updated = existing.copy(reps = state.reps, weight = state.weight)
+                dao.updateLogEntry(updated)
+                undoRequest = UndoRequest("Updated today's log") { dao.updateLogEntry(existing) }
+            } else {
+                val id = dao.insertLogEntry(
+                    com.example.gym.data.LogEntryEntity(
+                        setRowId = state.setRowId,
+                        reps = state.reps,
+                        weight = state.weight,
+                        date = today,
+                    ),
+                )
+                undoRequest = UndoRequest("Logged today") { dao.deleteLogEntry(id) }
+            }
         }
     }
 
@@ -542,15 +563,17 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun archive(setRowId: Long) {
+    fun archive(exerciseId: Long) {
         menuForSetRow = null
-        viewModelScope.launch { dao.setArchived(setRowId, true) }
-        undoRequest = UndoRequest("Archived") { dao.setArchived(setRowId, false) }
+        viewModelScope.launch {
+            dao.setExerciseArchived(exerciseId, true)
+            undoRequest = UndoRequest("Archived") { dao.setExerciseArchived(exerciseId, false) }
+        }
     }
 
-    fun resurrect(setRowId: Long) {
+    fun resurrect(exerciseId: Long) {
         menuForSetRow = null
-        viewModelScope.launch { dao.setArchived(setRowId, false) }
+        viewModelScope.launch { dao.setExerciseArchived(exerciseId, false) }
     }
 
     fun deleteRow(setRowId: Long) {

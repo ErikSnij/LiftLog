@@ -73,6 +73,7 @@ data class ExerciseEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val areaId: Long,
     val name: String,
+    val archived: Boolean = false,
 )
 
 /**
@@ -96,7 +97,14 @@ data class SetRowEntity(
     val exerciseId: Long,
     val note: String? = null,
     val flag: Flag = Flag.NONE,
-    val archived: Boolean = false,
+)
+
+/** One body-weight measurement per day (unique constraint on date). */
+@Entity(tableName = "body_weight", indices = [Index("date", unique = true)])
+data class BodyWeightEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val weight: Float,
+    @ColumnInfo(name = "date") val date: LocalDate,
 )
 
 /**

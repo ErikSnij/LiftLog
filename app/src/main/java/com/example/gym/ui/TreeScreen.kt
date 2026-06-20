@@ -92,7 +92,7 @@ import java.time.LocalDate
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
+fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modifier: Modifier = Modifier) {
     val vm: TreeViewModel = viewModel()
     val tree by vm.tree.collectAsStateWithLifecycle()
     val showArchived = vm.showArchived
@@ -102,7 +102,10 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val app = context.applicationContext as com.example.gym.LiftLogApp
-    val listState = rememberLazyListState()
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = vm.savedScrollIndex,
+        initialFirstVisibleItemScrollOffset = vm.savedScrollOffset,
+    )
 
     // Scrolling the page dismisses a pending edit — so an accidental tap on a
     // value/date is easily shrugged off by just scrolling on.
@@ -144,6 +147,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                     onToggleArchived = vm::updateShowArchived,
                     onExport = { scope.launch { shareExport(context, app) } },
                     onAddCategory = vm::promptAddCategory,
+                    onBodyWeight = onOpenBodyWeight,
                 )
                 HorizontalDivider()
 
@@ -207,8 +211,8 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                             }
                             if (!areaCollapsed) {
                             for (exercise in area.exercises) {
-                                val rows = if (showArchived) exercise.setRows
-                                else exercise.setRows.filter { !it.archived }
+                                if (!showArchived && exercise.archived) continue
+                                val rows = exercise.setRows
                                 // An exercise with no visible rows still shows its name.
                                 if (rows.isEmpty()) {
                                     item(key = exerciseKey(exercise.id)) {
@@ -229,7 +233,14 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                                             onCancel = vm::cancelEdit,
                                             onRepsSelected = vm::setPendingReps,
                                             onWeightSelected = vm::setPendingWeight,
-                                            onHistory = { vm.cancelEdit(); onOpenHistory(row.id) },
+                                            onHistory = {
+                                                vm.saveScrollPosition(
+                                                    listState.firstVisibleItemIndex,
+                                                    listState.firstVisibleItemScrollOffset,
+                                                )
+                                                vm.cancelEdit()
+                                                onOpenHistory(row.id)
+                                            },
                                             onNoteTap = {
                                                 vm.showDialog(TreeViewModel.RowDialog.EditNote(row.id, row.note))
                                             },
@@ -237,7 +248,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                                         )
                                         RowMenu(
                                             expanded = vm.menuForSetRow == row.id,
-                                            archived = row.archived,
+                                            archived = exercise.archived,
                                             isFirstRow = index == 0,
                                             onDismiss = vm::closeMenu,
                                             onEditNote = {
@@ -247,8 +258,8 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, modifier: Modifier = Modifier) {
                                                 vm.showDialog(TreeViewModel.RowDialog.Rename(exercise.id, exercise.name))
                                             },
                                             onAddSetRow = { vm.addSetRow(row.id) },
-                                            onArchive = { vm.archive(row.id) },
-                                            onResurrect = { vm.resurrect(row.id) },
+                                            onArchive = { vm.archive(exercise.id) },
+                                            onResurrect = { vm.resurrect(exercise.id) },
                                             onDelete = { vm.deleteRow(row.id) },
                                             onDeleteExercise = { vm.deleteExercise(exercise.id) },
                                         )
@@ -795,7 +806,7 @@ private fun ValueWheels(
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
 ) {
-    val repsValues = remember { wheelValues(60f, step = 1f) }
+    val repsValues = remember { wheelValues(60f, step = 0.5f) }
     val weightValues = remember { wheelValues(300f) }
     // Swallow stray taps so they don't bubble up and cancel the edit.
     Row(
@@ -1045,6 +1056,7 @@ private fun TopBar(
     onToggleArchived: (Boolean) -> Unit,
     onExport: () -> Unit,
     onAddCategory: () -> Unit,
+    onBodyWeight: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val caretColor = MaterialTheme.colorScheme.onSurface
@@ -1090,6 +1102,16 @@ private fun TopBar(
             )
         }
         Spacer(Modifier.weight(1f))
+        Text(
+            "BW",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onBodyWeight)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        )
         Text(
             "+ Category",
             fontSize = 14.sp,
@@ -1163,7 +1185,7 @@ private fun AppMenu(
             Column(modifier = Modifier.weight(1f)) {
                 Text("Show archived", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Text(
-                    "Reveal retired set rows",
+                    "Reveal retired exercises",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -2,6 +2,7 @@ package com.example.gym.data
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
@@ -23,7 +24,7 @@ interface LiftLogDao {
     @Query("SELECT * FROM exercise ORDER BY id")
     fun observeExercises(): Flow<List<ExerciseEntity>>
 
-    @Query("SELECT * FROM set_row WHERE archived = 0 ORDER BY id")
+    @Query("SELECT sr.* FROM set_row sr JOIN exercise e ON e.id = sr.exerciseId WHERE e.archived = 0 ORDER BY sr.id")
     fun observeActiveSetRows(): Flow<List<SetRowEntity>>
 
     @Query("SELECT * FROM set_row ORDER BY id")
@@ -56,8 +57,9 @@ interface LiftLogDao {
         """
         SELECT e.id AS parentId, MAX(le.date) AS lastPerformed
         FROM exercise e
-        LEFT JOIN set_row sr ON sr.exerciseId = e.id AND sr.archived = 0
+        LEFT JOIN set_row sr ON sr.exerciseId = e.id
         LEFT JOIN log_entry le ON le.setRowId = sr.id
+        WHERE e.archived = 0
         GROUP BY e.id
         """
     )
@@ -67,8 +69,8 @@ interface LiftLogDao {
         """
         SELECT a.id AS parentId, MAX(le.date) AS lastPerformed
         FROM area a
-        LEFT JOIN exercise e ON e.areaId = a.id
-        LEFT JOIN set_row sr ON sr.exerciseId = e.id AND sr.archived = 0
+        LEFT JOIN exercise e ON e.areaId = a.id AND e.archived = 0
+        LEFT JOIN set_row sr ON sr.exerciseId = e.id
         LEFT JOIN log_entry le ON le.setRowId = sr.id
         GROUP BY a.id
         """
@@ -80,8 +82,8 @@ interface LiftLogDao {
         SELECT mg.id AS parentId, MAX(le.date) AS lastPerformed
         FROM muscle_group mg
         LEFT JOIN area a ON a.muscleGroupId = mg.id
-        LEFT JOIN exercise e ON e.areaId = a.id
-        LEFT JOIN set_row sr ON sr.exerciseId = e.id AND sr.archived = 0
+        LEFT JOIN exercise e ON e.areaId = a.id AND e.archived = 0
+        LEFT JOIN set_row sr ON sr.exerciseId = e.id
         LEFT JOIN log_entry le ON le.setRowId = sr.id
         GROUP BY mg.id
         """
@@ -94,8 +96,8 @@ interface LiftLogDao {
         FROM category c
         LEFT JOIN muscle_group mg ON mg.categoryId = c.id
         LEFT JOIN area a ON a.muscleGroupId = mg.id
-        LEFT JOIN exercise e ON e.areaId = a.id
-        LEFT JOIN set_row sr ON sr.exerciseId = e.id AND sr.archived = 0
+        LEFT JOIN exercise e ON e.areaId = a.id AND e.archived = 0
+        LEFT JOIN set_row sr ON sr.exerciseId = e.id
         LEFT JOIN log_entry le ON le.setRowId = sr.id
         GROUP BY c.id
         """
@@ -165,8 +167,26 @@ interface LiftLogDao {
     @Query("UPDATE set_row SET note = :note WHERE id = :setRowId")
     suspend fun updateNote(setRowId: Long, note: String?)
 
-    @Query("UPDATE set_row SET archived = :archived WHERE id = :setRowId")
-    suspend fun setArchived(setRowId: Long, archived: Boolean)
+    @Query("UPDATE exercise SET archived = :archived WHERE id = :exerciseId")
+    suspend fun setExerciseArchived(exerciseId: Long, archived: Boolean)
+
+    @Query("SELECT * FROM log_entry WHERE setRowId = :setRowId AND date = :date LIMIT 1")
+    suspend fun getLogEntryForDate(setRowId: Long, date: java.time.LocalDate): LogEntryEntity?
+
+    // ---- Body weight -------------------------------------------------------
+
+    @Query("SELECT * FROM body_weight ORDER BY date DESC")
+    fun observeBodyWeightHistory(): Flow<List<BodyWeightEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertBodyWeight(entry: BodyWeightEntity): Long
+
+    @Query("DELETE FROM body_weight WHERE id = :id")
+    suspend fun deleteBodyWeight(id: Long)
+
+    /** Most recent body weight on or before [date]; used to fill in BW exercises on the chart. */
+    @Query("SELECT * FROM body_weight WHERE date <= :date ORDER BY date DESC LIMIT 1")
+    suspend fun getBodyWeightAt(date: java.time.LocalDate): BodyWeightEntity?
 
     @Query("UPDATE exercise SET name = :name WHERE id = :exerciseId")
     suspend fun renameExercise(exerciseId: Long, name: String)

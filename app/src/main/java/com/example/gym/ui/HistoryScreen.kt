@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gym.LiftLogApp
+import com.example.gym.data.BodyWeightEntity
 import com.example.gym.data.LogEntryEntity
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -61,6 +62,8 @@ fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modif
         .collectAsStateWithLifecycle(null)
     val note by remember(setRowId) { dao.observeSetRow(setRowId).map { it?.note } }
         .collectAsStateWithLifecycle(null)
+    val bodyWeights by remember { dao.observeBodyWeightHistory() }
+        .collectAsStateWithLifecycle(emptyList())
 
     var metric by remember { mutableStateOf(Metric.WEIGHT) }
     var draft by remember { mutableStateOf<LogEntryEntity?>(null) }
@@ -94,7 +97,7 @@ fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modif
         HorizontalDivider()
 
         MetricToggle(metric) { metric = it }
-        HistoryChart(history, metric)
+        HistoryChart(history, metric, bodyWeights)
         HorizontalDivider()
 
         // Editor lives OUTSIDE the scrolling list — nesting a vertical wheel inside a
@@ -179,13 +182,16 @@ private fun ToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric) {
-    // Points (oldest → newest) with a defined value for the chosen metric.
-    val points = remember(history, metric) {
+private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeights: List<BodyWeightEntity>) {
+    val sortedBW = remember(bodyWeights) { bodyWeights.sortedBy { it.date } }
+    val points = remember(history, metric, sortedBW) {
         history.sortedBy { it.date }.mapNotNull { e ->
             val v = when (metric) {
-                Metric.WEIGHT -> e.weight
-                Metric.ONE_RM -> epley(e.reps, e.weight)
+                Metric.WEIGHT -> e.weight ?: sortedBW.lastOrNull { it.date <= e.date }?.weight
+                Metric.ONE_RM -> {
+                    val w = e.weight ?: sortedBW.lastOrNull { it.date <= e.date }?.weight
+                    epley(e.reps, w)
+                }
             }
             if (v != null) ChartPoint(e.date, v, e.reps) else null
         }
@@ -196,76 +202,108 @@ private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric) {
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     val density = LocalDensity.current
 
-    Box(modifier = Modifier.fillMaxWidth().height(200.dp).padding(12.dp)) {
-        if (points.isEmpty()) {
-            Text(
-                "No numeric data to plot",
-                fontSize = 12.sp,
-                color = labelColor,
-                modifier = Modifier.align(Alignment.Center),
-            )
-            return@Box
+    if (points.isEmpty()) {
+        Box(modifier = Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
+            Text("No numeric data to plot", fontSize = 12.sp, color = labelColor)
+        }
+        return
+    }
+
+    Canvas(modifier = Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp, bottom = 4.dp, start = 8.dp, end = 8.dp)) {
+        val labelSp  = with(density) { 9.sp.toPx() }
+        val dotR     = with(density) { 5.dp.toPx() }
+        val leftMargin   = with(density) { 46.dp.toPx() }
+        val rightMargin  = with(density) { 8.dp.toPx() }
+        val topMargin    = with(density) { 18.dp.toPx() }   // room for rep labels
+        val bottomMargin = with(density) { 22.dp.toPx() }   // room for date labels
+
+        val cLeft   = leftMargin
+        val cRight  = size.width - rightMargin
+        val cTop    = topMargin
+        val cBottom = size.height - bottomMargin
+        val cW = cRight - cLeft
+        val cH = cBottom - cTop
+
+        val minV = points.minOf { it.value }
+        val maxV = points.maxOf { it.value }
+        val vPad = (maxV - minV).coerceAtLeast(1f) * 0.12f
+        val yLo = minV - vPad
+        val yHi = maxV + vPad
+
+        val minD = points.first().date.toEpochDay()
+        val maxD = points.last().date.toEpochDay()
+        val dRange = (maxD - minD).coerceAtLeast(1L)
+
+        fun xOf(d: Long) = if (points.size == 1) cLeft + cW / 2f
+            else cLeft + (d - minD).toFloat() / dRange * cW
+        fun yOf(v: Float) = cBottom - (v - yLo) / (yHi - yLo) * cH
+
+        // Axis lines
+        drawLine(axisColor, Offset(cLeft, cTop), Offset(cLeft, cBottom), strokeWidth = 1.5f)
+        drawLine(axisColor, Offset(cLeft, cBottom), Offset(cRight, cBottom), strokeWidth = 1.5f)
+
+        // Y grid + labels: min, mid, max of actual values
+        val yLabelPaint = android.graphics.Paint().apply {
+            textSize = labelSp; isAntiAlias = true; color = labelColor.toArgb()
+            textAlign = android.graphics.Paint.Align.RIGHT
+        }
+        val gridVals = if (minV == maxV) listOf(minV) else listOf(minV, (minV + maxV) / 2f, maxV)
+        drawIntoCanvas { canvas ->
+            gridVals.forEach { v ->
+                val gy = yOf(v)
+                drawLine(axisColor.copy(alpha = 0.35f), Offset(cLeft, gy), Offset(cRight, gy), strokeWidth = 1f)
+                canvas.nativeCanvas.drawText(
+                    "${Math.round(v)}",
+                    cLeft - with(density) { 5.dp.toPx() },
+                    gy + labelSp * 0.35f,
+                    yLabelPaint,
+                )
+            }
         }
 
-        val labelPx = with(density) { 9.sp.toPx() }
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val left = 8f
-            val right = size.width - 8f
-            val top = 24f
-            val bottom = size.height - 20f
+        val offsets = points.map { Offset(xOf(it.date.toEpochDay()), yOf(it.value)) }
 
-            val minV = points.minOf { it.value }
-            val maxV = points.maxOf { it.value }
-            val vRange = (maxV - minV).takeIf { it > 0f } ?: 1f
-            val minD = points.first().date.toEpochDay()
-            val maxD = points.last().date.toEpochDay()
-            val dRange = (maxD - minD).takeIf { it > 0 } ?: 1L
+        // Lines between points
+        for (i in 0 until offsets.size - 1) {
+            drawLine(lineColor, offsets[i], offsets[i + 1], strokeWidth = 3f)
+        }
+        // Dots — filled white center so they stand out
+        offsets.forEach {
+            drawCircle(lineColor, radius = dotR, center = it)
+            drawCircle(androidx.compose.ui.graphics.Color.White, radius = dotR * 0.45f, center = it)
+        }
 
-            fun x(d: Long) = if (points.size == 1) (left + right) / 2f
-            else left + (d - minD).toFloat() / dRange * (right - left)
-            fun y(v: Float) = bottom - (v - minV) / vRange * (bottom - top)
-
-            // baseline
-            drawLine(axisColor, Offset(left, bottom), Offset(right, bottom), strokeWidth = 2f)
-
-            val offsets = points.map { Offset(x(it.date.toEpochDay()), y(it.value)) }
-            for (i in 0 until offsets.size - 1) {
-                drawLine(lineColor, offsets[i], offsets[i + 1], strokeWidth = 3f)
+        drawIntoCanvas { canvas ->
+            // Rep labels above each dot
+            val repPaint = android.graphics.Paint().apply {
+                textSize = labelSp; isAntiAlias = true; color = labelColor.toArgb()
+                textAlign = android.graphics.Paint.Align.CENTER
             }
-            offsets.forEach { drawCircle(lineColor, radius = 6f, center = it) }
+            points.forEachIndexed { i, p ->
+                val reps = p.reps?.let(::trimFloat) ?: "?"
+                canvas.nativeCanvas.drawText(
+                    "${reps}r", offsets[i].x, offsets[i].y - dotR - with(density) { 3.dp.toPx() }, repPaint,
+                )
+            }
 
-            // rep labels above each point
-            drawIntoCanvas { canvas ->
-                val paint = android.graphics.Paint().apply {
-                    color = labelColor.toArgb()
-                    textSize = labelPx
-                    textAlign = android.graphics.Paint.Align.CENTER
-                    isAntiAlias = true
+            // X date labels: all points if ≤ 5, otherwise first + last only
+            val dateIndices = if (points.size <= 5) points.indices.toList() else listOf(0, points.size - 1)
+            val datePaint = android.graphics.Paint().apply {
+                textSize = labelSp; isAntiAlias = true; color = labelColor.toArgb()
+            }
+            dateIndices.forEach { i ->
+                val ox = offsets[i].x
+                datePaint.textAlign = when {
+                    ox < cLeft + cW * 0.25f -> android.graphics.Paint.Align.LEFT
+                    ox > cLeft + cW * 0.75f -> android.graphics.Paint.Align.RIGHT
+                    else                     -> android.graphics.Paint.Align.CENTER
                 }
-                points.forEachIndexed { i, p ->
-                    val reps = p.reps?.let(::trimFloat) ?: "?"
-                    canvas.nativeCanvas.drawText(
-                        "${reps}r",
-                        offsets[i].x,
-                        offsets[i].y - 12f,
-                        paint,
-                    )
-                }
+                canvas.nativeCanvas.drawText(
+                    formatMonthDay(points[i].date),
+                    ox, cBottom + labelSp + with(density) { 3.dp.toPx() }, datePaint,
+                )
             }
         }
-        // Min/max value labels (top-left = max, bottom-left = min)
-        Text(
-            round1(points.maxOf { it.value }),
-            fontSize = 9.sp,
-            color = labelColor,
-            modifier = Modifier.align(Alignment.TopStart),
-        )
-        Text(
-            round1(points.minOf { it.value }),
-            fontSize = 9.sp,
-            color = labelColor,
-            modifier = Modifier.align(Alignment.BottomStart),
-        )
     }
 }
 
@@ -309,7 +347,7 @@ private fun EntryEditor(
     onDelete: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val repsValues = remember { wheelValues(60f, step = 1f) }
+    val repsValues = remember { wheelValues(60f, step = 0.5f) }
     val weightValues = remember { wheelValues(300f) }
     Column(
         modifier = Modifier

@@ -56,7 +56,6 @@ object SeedImporter {
                                     exerciseId = exerciseId,
                                     note = setRow.note,
                                     flag = Flag.NONE,
-                                    archived = false,
                                 ),
                             )
                             val entry = setRow.seedEntry

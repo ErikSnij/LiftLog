@@ -102,5 +102,50 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+/**
+ * v3 → v4:
+ * - `archived` moves from set_row to exercise (exercise-level retirement).
+ *   Exercises where every set row was archived become archived; others stay active.
+ * - New `body_weight` table (one entry per day, unique constraint on date).
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // 1. Add archived flag to exercise
+        db.execSQL("ALTER TABLE `exercise` ADD COLUMN `archived` INTEGER NOT NULL DEFAULT 0")
+        // Carry forward: archive exercise if all its set rows were archived
+        db.execSQL(
+            "UPDATE `exercise` SET `archived` = 1 WHERE id IN (" +
+                "SELECT exerciseId FROM set_row " +
+                "GROUP BY exerciseId " +
+                "HAVING SUM(CASE WHEN archived = 0 THEN 1 ELSE 0 END) = 0" +
+                ")",
+        )
+
+        // 2. Recreate set_row without the archived column
+        db.execSQL(
+            "CREATE TABLE `set_row_new` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`exerciseId` INTEGER NOT NULL, " +
+                "`note` TEXT, " +
+                "`flag` TEXT NOT NULL, " +
+                "FOREIGN KEY(`exerciseId`) REFERENCES `exercise`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE)",
+        )
+        db.execSQL("INSERT INTO `set_row_new` (id, exerciseId, note, flag) SELECT id, exerciseId, note, flag FROM `set_row`")
+        db.execSQL("DROP TABLE `set_row`")
+        db.execSQL("ALTER TABLE `set_row_new` RENAME TO `set_row`")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_set_row_exerciseId` ON `set_row` (`exerciseId`)")
+
+        // 3. Body weight table
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `body_weight` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`weight` REAL NOT NULL, " +
+                "`date` INTEGER NOT NULL)",
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_body_weight_date` ON `body_weight` (`date`)")
+    }
+}
+
 /** Escape single quotes for inline SQL literals (none of our names use them, but be safe). */
 private fun String.sqlEscape(): String = replace("'", "''")
