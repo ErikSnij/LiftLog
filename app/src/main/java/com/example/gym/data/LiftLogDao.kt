@@ -269,4 +269,13 @@ interface LiftLogDao {
 
     @Query("SELECT * FROM log_entry ORDER BY id")
     suspend fun allLogEntries(): List<LogEntryEntity>
+
+    @Query("SELECT * FROM body_weight ORDER BY date")
+    suspend fun allBodyWeights(): List<BodyWeightEntity>
+
+    @Query("DELETE FROM category")
+    suspend fun deleteAllCategories()
+
+    @Query("DELETE FROM body_weight")
+    suspend fun deleteAllBodyWeights()
 }

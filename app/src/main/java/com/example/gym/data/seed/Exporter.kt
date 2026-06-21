@@ -7,7 +7,14 @@ import kotlinx.serialization.json.Json
 import java.time.LocalDate
 
 @Serializable
-data class ExportRoot(val exportedAt: String, val categories: List<ExportCategory>)
+data class ExportBodyWeight(val weight: Float, val date: String)
+
+@Serializable
+data class ExportRoot(
+    val exportedAt: String,
+    val categories: List<ExportCategory>,
+    val bodyWeights: List<ExportBodyWeight> = emptyList(),
+)
 
 @Serializable
 data class ExportCategory(val name: String, val muscleGroups: List<ExportMuscleGroup>)
@@ -43,9 +50,11 @@ object Exporter {
         val exercises = dao.allExercises().groupBy { it.areaId }
         val setRows = dao.allSetRows().groupBy { it.exerciseId }
         val entries = dao.allLogEntries().groupBy { it.setRowId }
+        val bodyWeights = dao.allBodyWeights()
 
         val root = ExportRoot(
             exportedAt = LocalDate.now().toString(),
+            bodyWeights = bodyWeights.map { ExportBodyWeight(it.weight, it.date.toString()) },
             categories = categories.map { c ->
                 ExportCategory(
                     name = c.name,

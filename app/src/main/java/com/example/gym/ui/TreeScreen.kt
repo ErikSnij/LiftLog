@@ -1,6 +1,9 @@
 package com.example.gym.ui
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -86,7 +89,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gym.data.Flag
 import com.example.gym.data.seed.Exporter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDate
 
@@ -102,6 +107,25 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val app = context.applicationContext as com.example.gym.LiftLogApp
+
+    val pickJson = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val text = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                }
+                if (text != null) vm.offerImport(text)
+            }
+        }
+    }
+
+    val importResult = vm.importResult
+    LaunchedEffect(importResult) {
+        if (importResult == null) return@LaunchedEffect
+        snackbarHostState.showSnackbar(importResult)
+        vm.clearImportResult()
+    }
+
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = vm.savedScrollIndex,
         initialFirstVisibleItemScrollOffset = vm.savedScrollOffset,
@@ -146,6 +170,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                     showArchived = showArchived,
                     onToggleArchived = vm::updateShowArchived,
                     onExport = { scope.launch { shareExport(context, app) } },
+                    onImport = { pickJson.launch(arrayOf("application/json", "text/plain")) },
                     onAddCategory = vm::promptAddCategory,
                     onBodyWeight = onOpenBodyWeight,
                 )
@@ -332,6 +357,22 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
             onDismiss = vm::dismissDialog,
         )
         null -> Unit
+    }
+
+    if (vm.pendingImportJson != null) {
+        AlertDialog(
+            onDismissRequest = vm::dismissImport,
+            title = { Text("Replace all data?") },
+            text = {
+                Text("This will delete everything currently in the app and replace it with the imported file. There is no undo.")
+            },
+            confirmButton = {
+                TextButton(onClick = vm::confirmImport) { Text("Replace") }
+            },
+            dismissButton = {
+                TextButton(onClick = vm::dismissImport) { Text("Cancel") }
+            },
+        )
     }
 }
 
@@ -1055,6 +1096,7 @@ private fun TopBar(
     showArchived: Boolean,
     onToggleArchived: (Boolean) -> Unit,
     onExport: () -> Unit,
+    onImport: () -> Unit,
     onAddCategory: () -> Unit,
     onBodyWeight: () -> Unit,
 ) {
@@ -1098,6 +1140,7 @@ private fun TopBar(
                 showArchived = showArchived,
                 onDismiss = { menuOpen = false },
                 onExport = { menuOpen = false; onExport() },
+                onImport = { menuOpen = false; onImport() },
                 onToggleArchived = onToggleArchived,
             )
         }
@@ -1125,13 +1168,14 @@ private fun TopBar(
     }
 }
 
-/** Styled overflow menu for app-level actions (export + show-archived toggle). */
+/** Styled overflow menu for app-level actions (export, import, show-archived toggle). */
 @Composable
 private fun AppMenu(
     expanded: Boolean,
     showArchived: Boolean,
     onDismiss: () -> Unit,
     onExport: () -> Unit,
+    onImport: () -> Unit,
     onToggleArchived: (Boolean) -> Unit,
 ) {
     DropdownMenu(
@@ -1166,6 +1210,26 @@ private fun AppMenu(
                 Text("Export data", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Text(
                     "Share your log as JSON",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(onClick = onImport)
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconChip { ImportGlyph(it) }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Import data", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    "Restore from a JSON backup",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1227,6 +1291,31 @@ private fun ExportGlyph(tint: Color) {
             moveTo(w * 0.30f, h * 0.40f)
             lineTo(w * 0.5f, h * 0.16f)
             lineTo(w * 0.70f, h * 0.40f)
+        }
+        drawPath(arrow, tint, style = s)
+        val tray = Path().apply {
+            moveTo(w * 0.22f, h * 0.60f)
+            lineTo(w * 0.22f, h * 0.86f)
+            lineTo(w * 0.78f, h * 0.86f)
+            lineTo(w * 0.78f, h * 0.60f)
+        }
+        drawPath(tray, tint, style = s)
+    }
+}
+
+/** Download-tray glyph for the import action (arrow pointing down into tray). */
+@Composable
+private fun ImportGlyph(tint: Color) {
+    Canvas(modifier = Modifier.size(20.dp)) {
+        val w = size.width
+        val h = size.height
+        val s = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val arrow = Path().apply {
+            moveTo(w * 0.5f, h * 0.16f)
+            lineTo(w * 0.5f, h * 0.72f)
+            moveTo(w * 0.30f, h * 0.50f)
+            lineTo(w * 0.5f, h * 0.72f)
+            lineTo(w * 0.70f, h * 0.50f)
         }
         drawPath(arrow, tint, style = s)
         val tray = Path().apply {

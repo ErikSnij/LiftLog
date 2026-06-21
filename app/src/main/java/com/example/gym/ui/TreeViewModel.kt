@@ -603,6 +603,31 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
     fun clearUndo() {
         undoRequest = null
     }
+
+    // ---- Import (replace entire DB from a previously exported JSON) --------
+
+    var pendingImportJson by mutableStateOf<String?>(null)
+        private set
+    var importResult by mutableStateOf<String?>(null)
+        private set
+
+    fun offerImport(json: String) { pendingImportJson = json }
+    fun dismissImport() { pendingImportJson = null }
+    fun clearImportResult() { importResult = null }
+
+    fun confirmImport() {
+        val json = pendingImportJson ?: return
+        pendingImportJson = null
+        viewModelScope.launch {
+            val result = com.example.gym.data.seed.Importer.import(db, json)
+            importResult = when (result) {
+                is com.example.gym.data.seed.Importer.Result.Success ->
+                    "Imported ${result.entries} entries across ${result.categories} categories"
+                is com.example.gym.data.seed.Importer.Result.Failure ->
+                    "Import failed: ${result.message}"
+            }
+        }
+    }
 }
 
 // Stable keys for expansion state, namespaced by level so ids never collide.
