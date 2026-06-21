@@ -26,7 +26,7 @@ data class ExportMuscleGroup(val name: String, val muscles: List<ExportArea>)
 data class ExportArea(val name: String, val exercises: List<ExportExercise>)
 
 @Serializable
-data class ExportExercise(val name: String, val archived: Boolean, val setRows: List<ExportSetRow>)
+data class ExportExercise(val name: String, val archived: Boolean = false, val setRows: List<ExportSetRow>)
 
 @Serializable
 data class ExportSetRow(
