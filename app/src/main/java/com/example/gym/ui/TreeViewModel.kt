@@ -197,6 +197,19 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         else collapsedAreas + id
     }
 
+    fun toggleCollapseAllMuscleGroups() {
+        val allIds = tree.value.categories.flatMap { it.muscleGroups }.map { it.id }.toSet()
+        collapsedMuscleGroups = if (collapsedMuscleGroups.containsAll(allIds)) emptySet()
+        else allIds
+    }
+
+    fun collapseAllAreasInGroup(muscleGroupId: Long) {
+        val group = tree.value.categories.flatMap { it.muscleGroups }.find { it.id == muscleGroupId }
+        val areaIds = group?.areas?.map { it.id }?.toSet() ?: return
+        collapsedAreas = if (collapsedAreas.containsAll(areaIds)) collapsedAreas - areaIds
+        else collapsedAreas + areaIds
+    }
+
     // ---- Move sections (swap sort_order of adjacent siblings) ------------
 
     fun moveCategory(id: Long, direction: Int) {

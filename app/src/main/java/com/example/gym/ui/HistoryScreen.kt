@@ -69,6 +69,13 @@ fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modif
     var draft by remember { mutableStateOf<LogEntryEntity?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
+    fun newDraft() = LogEntryEntity(
+        setRowId = setRowId,
+        reps = history.firstOrNull()?.reps,
+        weight = history.firstOrNull()?.weight,
+        date = LocalDate.now(),
+    )
+
     Box(modifier = modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Top bar
@@ -105,11 +112,13 @@ fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modif
         draft?.let { d ->
             EntryEditor(
                 draft = d,
+                isNew = d.id == 0L,
                 onRepsSelected = { draft = draft?.copy(reps = it) },
                 onWeightSelected = { draft = draft?.copy(weight = it) },
                 onDateShift = { days -> draft = draft?.let { it.copy(date = it.date.plusDays(days)) } },
                 onSave = {
-                    scope.launch { dao.updateLogEntry(d) }
+                    val isNew = d.id == 0L
+                    scope.launch { if (isNew) dao.insertLogEntry(d) else dao.updateLogEntry(d) }
                     draft = null
                 },
                 onDelete = {
@@ -131,12 +140,27 @@ fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modif
             HorizontalDivider()
         }
 
-        Text(
-            "History (${history.size}) — tap an entry to edit",
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 2.dp),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "History (${history.size})",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                "+ Add",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { if (draft == null) draft = newDraft() }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+        }
 
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             items(history, key = { it.id }) { entry ->
@@ -226,16 +250,18 @@ private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeig
 
         val minV = points.minOf { it.value }
         val maxV = points.maxOf { it.value }
-        val vPad = (maxV - minV).coerceAtLeast(1f) * 0.12f
-        val yLo = minV - vPad
-        val yHi = maxV + vPad
+        val mean = (minV + maxV) / 2f
+        val halfRange = maxOf(mean * 0.30f, (maxV - minV) / 2f * 1.15f).coerceAtLeast(1f)
+        val yLo = (mean - halfRange).coerceAtLeast(0f)
+        val yHi = mean + halfRange
 
+        val hPad = with(density) { 12.dp.toPx() }
         val minD = points.first().date.toEpochDay()
         val maxD = points.last().date.toEpochDay()
         val dRange = (maxD - minD).coerceAtLeast(1L)
 
         fun xOf(d: Long) = if (points.size == 1) cLeft + cW / 2f
-            else cLeft + (d - minD).toFloat() / dRange * cW
+            else cLeft + hPad + (d - minD).toFloat() / dRange * (cW - 2 * hPad)
         fun yOf(v: Float) = cBottom - (v - yLo) / (yHi - yLo) * cH
 
         // Axis lines
@@ -247,13 +273,14 @@ private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeig
             textSize = labelSp; isAntiAlias = true; color = labelColor.toArgb()
             textAlign = android.graphics.Paint.Align.RIGHT
         }
-        val gridVals = if (minV == maxV) listOf(minV) else listOf(minV, (minV + maxV) / 2f, maxV)
+        val gridInts = if (minV == maxV) listOf(Math.round(minV))
+            else listOf(Math.round(yLo), Math.round((yLo + yHi) / 2f), Math.round(yHi)).distinct()
         drawIntoCanvas { canvas ->
-            gridVals.forEach { v ->
-                val gy = yOf(v)
+            gridInts.forEach { v ->
+                val gy = yOf(v.toFloat())
                 drawLine(axisColor.copy(alpha = 0.35f), Offset(cLeft, gy), Offset(cRight, gy), strokeWidth = 1f)
                 canvas.nativeCanvas.drawText(
-                    "${Math.round(v)}",
+                    "$v",
                     cLeft - with(density) { 5.dp.toPx() },
                     gy + labelSp * 0.35f,
                     yLabelPaint,
@@ -340,6 +367,7 @@ private fun EntryRow(entry: LogEntryEntity, selected: Boolean, onClick: () -> Un
 @Composable
 private fun EntryEditor(
     draft: LogEntryEntity,
+    isNew: Boolean = false,
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
     onDateShift: (Long) -> Unit,
@@ -347,7 +375,7 @@ private fun EntryEditor(
     onDelete: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val repsValues = remember { wheelValues(60f, step = 0.5f) }
+    val repsValues = remember { wheelValues(60f, step = 1f) }
     val weightValues = remember { wheelValues(300f) }
     Column(
         modifier = Modifier
@@ -372,28 +400,30 @@ private fun EntryEditor(
                 onSelected = onWeightSelected,
             )
             Spacer(Modifier.weight(1f))
-            // Date steppers
+            // Date: label above, steppers below so thumb doesn't cover it
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(formatDate(draft.date), fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     StepperButton("−1m") { onDateShift(-30) }
                     StepperButton("−1d") { onDateShift(-1) }
                     StepperButton("+1d") { onDateShift(1) }
                     StepperButton("+1m") { onDateShift(30) }
                 }
-                Text(formatDate(draft.date), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
             }
         }
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                "Delete",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.clickable(onClick = onDelete),
-            )
+            if (!isNew) {
+                Text(
+                    "Delete",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.clickable(onClick = onDelete),
+                )
+            }
             Spacer(Modifier.weight(1f))
             Text(
                 "Cancel",

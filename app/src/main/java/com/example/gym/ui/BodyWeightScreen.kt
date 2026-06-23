@@ -178,16 +178,17 @@ private fun BwChart(history: List<BodyWeightEntity>) {
 
         val minV = sorted.minOf { it.weight }
         val maxV = sorted.maxOf { it.weight }
-        val vPad = (maxV - minV).coerceAtLeast(1f) * 0.12f
+        val vPad = (maxV - minV).coerceAtLeast(1f) * 0.15f
         val yLo = minV - vPad
         val yHi = maxV + vPad
 
+        val hPad = with(density) { 12.dp.toPx() }
         val minD = sorted.first().date.toEpochDay()
         val maxD = sorted.last().date.toEpochDay()
         val dRange = (maxD - minD).coerceAtLeast(1L)
 
         fun xOf(d: Long) = if (sorted.size == 1) cLeft + cW / 2f
-            else cLeft + (d - minD).toFloat() / dRange * cW
+            else cLeft + hPad + (d - minD).toFloat() / dRange * (cW - 2 * hPad)
         fun yOf(v: Float) = cBottom - (v - yLo) / (yHi - yLo) * cH
 
         drawLine(axisColor, Offset(cLeft, cTop), Offset(cLeft, cBottom), strokeWidth = 1.5f)
@@ -197,13 +198,14 @@ private fun BwChart(history: List<BodyWeightEntity>) {
             textSize = labelSp; isAntiAlias = true; color = labelColor.toArgb()
             textAlign = android.graphics.Paint.Align.RIGHT
         }
-        val gridVals = if (minV == maxV) listOf(minV) else listOf(minV, (minV + maxV) / 2f, maxV)
+        val gridInts = if (minV == maxV) listOf(Math.round(minV))
+            else listOf(Math.round(minV), Math.round((minV + maxV) / 2f), Math.round(maxV)).distinct()
         drawIntoCanvas { canvas ->
-            gridVals.forEach { v ->
-                val gy = yOf(v)
+            gridInts.forEach { v ->
+                val gy = yOf(v.toFloat())
                 drawLine(axisColor.copy(alpha = 0.35f), Offset(cLeft, gy), Offset(cRight, gy), strokeWidth = 1f)
                 canvas.nativeCanvas.drawText(
-                    "${Math.round(v)}",
+                    "$v",
                     cLeft - with(density) { 5.dp.toPx() },
                     gy + labelSp * 0.35f,
                     yLabelPaint,
@@ -271,13 +273,13 @@ private fun BwEditor(
             )
             Spacer(Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(formatDate(draft.date), fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     StepperButton("−1m") { onDateShift(-30) }
                     StepperButton("−1d") { onDateShift(-1) }
                     StepperButton("+1d") { onDateShift(1) }
                     StepperButton("+1m") { onDateShift(30) }
                 }
-                Text(formatDate(draft.date), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
             }
         }
         Row(

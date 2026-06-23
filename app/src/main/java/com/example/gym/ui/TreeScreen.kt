@@ -61,6 +61,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
@@ -90,6 +91,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gym.data.Flag
 import com.example.gym.data.seed.Exporter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -173,6 +175,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                     onImport = { pickJson.launch(arrayOf("application/json", "text/plain")) },
                     onAddCategory = vm::promptAddCategory,
                     onBodyWeight = onOpenBodyWeight,
+                    onCollapseAll = vm::toggleCollapseAllMuscleGroups,
                 )
                 HorizontalDivider()
 
@@ -211,6 +214,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                                     onDelete = { vm.deleteMuscleGroup(group.id) },
                                     onMoveUp = { vm.moveMuscleGroup(group.id, -1) },
                                     onMoveDown = { vm.moveMuscleGroup(group.id, 1) },
+                                    onCollapseAllAreas = { vm.collapseAllAreasInGroup(group.id) },
                                 )
                             }
                         if (!groupCollapsed) {
@@ -275,6 +279,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                                             expanded = vm.menuForSetRow == row.id,
                                             archived = exercise.archived,
                                             isFirstRow = index == 0,
+                                            rowCount = rows.size,
                                             onDismiss = vm::closeMenu,
                                             onEditNote = {
                                                 vm.showDialog(TreeViewModel.RowDialog.EditNote(row.id, row.note))
@@ -440,6 +445,7 @@ private fun MuscleGroupHeader(
     onDelete: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    onCollapseAllAreas: () -> Unit,
 ) {
     Box {
         Row(
@@ -481,6 +487,7 @@ private fun MuscleGroupHeader(
             onDelete = onDelete,
             onMoveUp = onMoveUp,
             onMoveDown = onMoveDown,
+            onCollapseAllAreas = onCollapseAllAreas,
         )
     }
 }
@@ -496,6 +503,7 @@ private fun HeaderMenu(
     onDelete: () -> Unit,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
+    onCollapseAllAreas: (() -> Unit)? = null,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         onMoveUp?.let { action ->
@@ -503,6 +511,9 @@ private fun HeaderMenu(
         }
         onMoveDown?.let { action ->
             DropdownMenuItem(text = { Text("Move down") }, onClick = { onDismiss(); action() })
+        }
+        onCollapseAllAreas?.let { action ->
+            DropdownMenuItem(text = { Text("Collapse / expand all areas") }, onClick = { onDismiss(); action() })
         }
         DropdownMenuItem(text = { Text(renameLabel) }, onClick = onRename)
         DropdownMenuItem(
@@ -639,12 +650,26 @@ private fun SetRowLine(
     val shownReps = edit?.reps ?: row.reps
     val shownWeight = edit?.weight ?: row.weight
 
+    val today = LocalDate.now()
+    val daysSince = if (row.date != null) (today.toEpochDay() - row.date.toEpochDay()).coerceAtLeast(0L) else Long.MAX_VALUE
+    val recencyAlpha = if (!row.archived && daysSince < 7) (0.15f * (7f - daysSince) / 7f) else 0f
+
+    var revealName by remember { mutableStateOf(false) }
+    LaunchedEffect(revealName) {
+        if (revealName) {
+            delay(2500)
+            revealName = false
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .then(
                 if (row.archived)
                     Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                else if (recencyAlpha > 0f)
+                    Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = recencyAlpha))
                 else Modifier
             ),
     ) {
@@ -674,7 +699,10 @@ private fun SetRowLine(
                 Box(
                     modifier = Modifier
                         .width(130.dp)
-                        .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                        .combinedClickable(
+                            onClick = { if (exerciseName != null) revealName = !revealName },
+                            onLongClick = onLongPress,
+                        )
                         .padding(vertical = 5.dp),
                 ) {
                     if (exerciseName != null) {
@@ -683,8 +711,8 @@ private fun SetRowLine(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = baseColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            maxLines = if (revealName) Int.MAX_VALUE else 1,
+                            overflow = if (revealName) TextOverflow.Visible else TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -847,7 +875,7 @@ private fun ValueWheels(
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
 ) {
-    val repsValues = remember { wheelValues(60f, step = 0.5f) }
+    val repsValues = remember { wheelValues(60f, step = 1f) }
     val weightValues = remember { wheelValues(300f) }
     // Swallow stray taps so they don't bubble up and cancel the edit.
     Row(
@@ -991,6 +1019,7 @@ private fun RowMenu(
     expanded: Boolean,
     archived: Boolean,
     isFirstRow: Boolean,
+    rowCount: Int,
     onDismiss: () -> Unit,
     onEditNote: () -> Unit,
     onRename: () -> Unit,
@@ -1008,17 +1037,18 @@ private fun RowMenu(
             DropdownMenuItem(text = { Text("Rename exercise") }, onClick = onRename)
             DropdownMenuItem(text = { Text("Add set row") }, onClick = onAddSetRow)
             DropdownMenuItem(text = { Text("Archive") }, onClick = onArchive)
-            // The name-bearing first row deletes the whole exercise; repeated rows
-            // below it delete just that individual row.
+            // "Delete row" available on any row when there are multiple rows.
+            if (rowCount > 1) {
+                DropdownMenuItem(
+                    text = { Text("Delete row", color = MaterialTheme.colorScheme.error) },
+                    onClick = onDelete,
+                )
+            }
+            // "Delete exercise" available on the first (name-bearing) row.
             if (isFirstRow) {
                 DropdownMenuItem(
                     text = { Text("Delete exercise", color = MaterialTheme.colorScheme.error) },
                     onClick = onDeleteExercise,
-                )
-            } else {
-                DropdownMenuItem(
-                    text = { Text("Delete row", color = MaterialTheme.colorScheme.error) },
-                    onClick = onDelete,
                 )
             }
         }
@@ -1099,9 +1129,11 @@ private fun TopBar(
     onImport: () -> Unit,
     onAddCategory: () -> Unit,
     onBodyWeight: () -> Unit,
+    onCollapseAll: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val caretColor = MaterialTheme.colorScheme.onSurface
+    val primaryColor = MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1145,6 +1177,26 @@ private fun TopBar(
             )
         }
         Spacer(Modifier.weight(1f))
+        // Collapse / expand all muscle groups — distinct from individual ▸/▾ chevrons
+        Canvas(
+            modifier = Modifier
+                .size(28.dp, 22.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(onClick = onCollapseAll)
+                .padding(3.dp),
+        ) {
+            val w = size.width; val h = size.height
+            val sw = 1.8.dp.toPx()
+            val s = Stroke(sw, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            drawLine(primaryColor, Offset(0f, h * 0.15f), Offset(w, h * 0.15f), sw)
+            drawLine(primaryColor, Offset(0f, h * 0.48f), Offset(w, h * 0.48f), sw)
+            val chev = Path().apply {
+                moveTo(w * 0.22f, h * 0.68f)
+                lineTo(w * 0.5f, h * 0.90f)
+                lineTo(w * 0.78f, h * 0.68f)
+            }
+            drawPath(chev, primaryColor, style = s)
+        }
         Text(
             "BW",
             fontSize = 14.sp,
