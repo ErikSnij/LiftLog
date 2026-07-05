@@ -232,11 +232,12 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                         for (area in group.areas) {
                             val areaCollapsed = area.id in vm.collapsedAreas
                             stickyHeader(key = areaKey(area.id)) {
+                                // Fixed content — always category + group + area. A version that
+                                // only shows the breadcrumb when this item is the active/pinned one
+                                // was tried and reverted: changing a stickyHeader's height based on
+                                // scroll-derived state causes Compose to not reflow the content below
+                                // it, so the header visibly overlapped the next row once it "woke up".
                                 Column {
-                                // Compact category breadcrumb — since only one stickyHeader can be
-                                // active at a time, this bundle fully replaces the category's own
-                                // sticky header once scrolled past it; without this strip the
-                                // category name would vanish entirely while browsing exercises.
                                 Text(
                                     text = category.name.uppercase(),
                                     fontSize = 10.sp,
