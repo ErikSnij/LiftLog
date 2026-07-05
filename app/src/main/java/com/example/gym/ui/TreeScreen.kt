@@ -233,6 +233,21 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                             val areaCollapsed = area.id in vm.collapsedAreas
                             stickyHeader(key = areaKey(area.id)) {
                                 Column {
+                                // Compact category breadcrumb — since only one stickyHeader can be
+                                // active at a time, this bundle fully replaces the category's own
+                                // sticky header once scrolled past it; without this strip the
+                                // category name would vanish entirely while browsing exercises.
+                                Text(
+                                    text = category.name.uppercase(),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
+                                        .padding(start = 12.dp, top = 2.dp, bottom = 2.dp),
+                                )
                                 groupHeader()
                                 AreaHeader(
                                     name = area.name,
@@ -465,7 +480,9 @@ private fun MuscleGroupHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f))
+                // Opaque: this header can be pinned (sticky), so content scrolling
+                // underneath must not show through.
+                .background(MaterialTheme.colorScheme.secondaryContainer)
                 .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
                 .padding(start = 16.dp, end = 4.dp, top = 5.dp, bottom = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -571,7 +588,9 @@ private fun AreaHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                // Opaque: this header is bundled into a sticky unit with the muscle-group
+                // header above it, so content scrolling underneath must not show through.
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
                 .padding(start = 22.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -666,9 +685,11 @@ private fun SetRowLine(
 
     val today = LocalDate.now()
     val daysSince = if (row.date != null) (today.toEpochDay() - row.date.toEpochDay()).coerceAtLeast(0L) else Long.MAX_VALUE
-    // Fixed light-blue tint (not theme-derived) so it stays visible in dark mode; today gets an
-    // extra boost on top of the day-based fade so it reads as clearly the most recent.
-    val recencyColor = Color(0xFF42A5F5)
+    // Fixed warm amber tint (not theme-derived, so it stays visible in dark mode) — deliberately
+    // not blue, since the category/muscle-group/muscle headers are all blue-grey and a blue
+    // highlight here read as "another section" rather than a highlight. Today gets an extra
+    // boost on top of the day-based fade so it reads as clearly the most recent.
+    val recencyColor = Color(0xFFFFA726)
     val recencyAlpha = when {
         row.archived -> 0f
         daysSince == 0L -> 0.32f
@@ -746,7 +767,8 @@ private fun SetRowLine(
                     }
                 }
 
-                Spacer(Modifier.width(12.dp))
+                // Wider now that the graph icon moved up beside the name, freeing room here.
+                Spacer(Modifier.width(28.dp))
                 // Reps × weight, then the ± flag immediately beside it (tight group).
                 if (shownReps == null && shownWeight == null) {
                     // Empty: an inviting outlined placeholder instead of a bare dash.
