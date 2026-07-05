@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -65,7 +66,7 @@ fun BodyWeightScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         date = LocalDate.now(),
     )
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().imePadding()) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Top bar
             Row(
@@ -102,6 +103,7 @@ fun BodyWeightScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     isNew = d.id == 0L,
                     onWeightSelected = { draft = d.copy(weight = it ?: 0f) },
                     onDateShift = { days -> draft = d.copy(date = d.date.plusDays(days)) },
+                    onYearShift = { years -> draft = d.copy(date = d.date.plusYears(years)) },
                     onSave = {
                         val toSave = d
                         draft = null
@@ -250,6 +252,7 @@ private fun BwEditor(
     isNew: Boolean,
     onWeightSelected: (Float?) -> Unit,
     onDateShift: (Long) -> Unit,
+    onYearShift: (Long) -> Unit,
     onSave: () -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit,
@@ -274,11 +277,15 @@ private fun BwEditor(
             Spacer(Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(formatDate(draft.date), fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    StepperButton("−1y") { onYearShift(-1) }
                     StepperButton("−1m") { onDateShift(-30) }
                     StepperButton("−1d") { onDateShift(-1) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
                     StepperButton("+1d") { onDateShift(1) }
                     StepperButton("+1m") { onDateShift(30) }
+                    StepperButton("+1y") { onYearShift(1) }
                 }
             }
         }

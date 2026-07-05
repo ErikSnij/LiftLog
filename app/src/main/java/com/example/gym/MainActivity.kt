@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
                         historyId >= 0 -> {
                             BackHandler { historyId = -1L }
                             HistoryScreen(
-                                setRowId = historyId,
+                                exerciseId = historyId,
                                 onBack = { historyId = -1L },
                                 modifier = Modifier.padding(innerPadding),
                             )

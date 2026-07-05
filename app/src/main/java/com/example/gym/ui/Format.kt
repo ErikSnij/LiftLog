@@ -41,3 +41,11 @@ internal fun epley(reps: Float?, weight: Float?): Float? =
 
 /** Round to 1 decimal place and trim a trailing ".0" (avoids float-artifact labels). */
 internal fun round1(value: Float): String = trimFloat(Math.round(value * 10f) / 10f)
+
+/**
+ * Inverts the Epley formula to ask "how many reps would this e1RM be at [targetWeight]?".
+ * Anchoring to the heaviest weight ever lifted turns performance at any weight into a single
+ * comparable rep count, so progress reads as a trend even as the working weight changes.
+ */
+internal fun repsAtWeight(e1RM: Float, targetWeight: Float): Float? =
+    if (targetWeight > 0f) 30f * (e1RM / targetWeight - 1f) else null

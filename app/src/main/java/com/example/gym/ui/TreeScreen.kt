@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -162,6 +163,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
+                .imePadding()
                 // Tap anywhere not consumed by an edit control → cancel the pending edit.
                 .pointerInput(edit != null) {
                     if (edit != null) detectTapGestures { vm.cancelEdit() }
@@ -268,7 +270,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                                                     listState.firstVisibleItemScrollOffset,
                                                 )
                                                 vm.cancelEdit()
-                                                onOpenHistory(row.id)
+                                                onOpenHistory(exercise.id)
                                             },
                                             onNoteTap = {
                                                 vm.showDialog(TreeViewModel.RowDialog.EditNote(row.id, row.note))
@@ -602,7 +604,7 @@ private fun ExerciseHeader(name: String, date: LocalDate?) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 22.dp, end = 12.dp, top = 5.dp, bottom = 1.dp),
+            .padding(start = 22.dp, end = 12.dp, top = 3.dp, bottom = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -652,7 +654,15 @@ private fun SetRowLine(
 
     val today = LocalDate.now()
     val daysSince = if (row.date != null) (today.toEpochDay() - row.date.toEpochDay()).coerceAtLeast(0L) else Long.MAX_VALUE
-    val recencyAlpha = if (!row.archived && daysSince < 7) (0.15f * (7f - daysSince) / 7f) else 0f
+    // Fixed light-blue tint (not theme-derived) so it stays visible in dark mode; today gets an
+    // extra boost on top of the day-based fade so it reads as clearly the most recent.
+    val recencyColor = Color(0xFF42A5F5)
+    val recencyAlpha = when {
+        row.archived -> 0f
+        daysSince == 0L -> 0.32f
+        daysSince < 7 -> 0.20f * (7f - daysSince) / 7f
+        else -> 0f
+    }
 
     var revealName by remember { mutableStateOf(false) }
     LaunchedEffect(revealName) {
@@ -669,7 +679,7 @@ private fun SetRowLine(
                 if (row.archived)
                     Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 else if (recencyAlpha > 0f)
-                    Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = recencyAlpha))
+                    Modifier.background(recencyColor.copy(alpha = recencyAlpha))
                 else Modifier
             ),
     ) {
@@ -703,17 +713,24 @@ private fun SetRowLine(
                             onClick = { if (exerciseName != null) revealName = !revealName },
                             onLongClick = onLongPress,
                         )
-                        .padding(vertical = 5.dp),
+                        .padding(vertical = 3.dp),
                 ) {
                     if (exerciseName != null) {
-                        Text(
-                            text = exerciseName,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = baseColor,
-                            maxLines = if (revealName) Int.MAX_VALUE else 1,
-                            overflow = if (revealName) TextOverflow.Visible else TextOverflow.Ellipsis,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = exerciseName,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = baseColor,
+                                maxLines = if (revealName) Int.MAX_VALUE else 1,
+                                overflow = if (revealName) TextOverflow.Visible else TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            // One graph icon per exercise (first row only) — opens the combined
+                            // history across all of the exercise's set rows.
+                            GraphIcon(tint = mutedColor, onClick = onHistory)
+                        }
                     }
                 }
 
@@ -749,9 +766,7 @@ private fun SetRowLine(
                         .combinedClickable(onClick = {}, onLongClick = onLongPress),
                 ) { Spacer(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
 
-                // ── Group 2: graph icon + date, kept tight together ──
-                GraphIcon(tint = mutedColor, onClick = onHistory)
-
+                // ── Group 2: date ──
                 if (edit?.armed == true) {
                     // Armed by tapping the date: ✕ cancel, then ✓ confirm (check on the right).
                     Text(
@@ -937,8 +952,8 @@ internal fun WheelOrTypeField(
                 BasicTextField(
                     value = text,
                     onValueChange = {
-                        // Keep digits + a single decimal point; push the value live.
-                        val filtered = it.filter { c -> c.isDigit() || c == '.' }
+                        // Some numpads only offer a comma; treat it as a decimal point.
+                        val filtered = it.replace(',', '.').filter { c -> c.isDigit() || c == '.' }
                         text = filtered
                         onSelected(filtered.toFloatOrNull())
                     },

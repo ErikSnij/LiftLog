@@ -156,6 +156,23 @@ interface LiftLogDao {
     )
     fun observeExerciseNameForSetRow(setRowId: Long): Flow<String?>
 
+    /** Combined history across every set row of an exercise — bench press A/B/C read as one series. */
+    @Query(
+        """
+        SELECT le.* FROM log_entry le
+        JOIN set_row sr ON sr.id = le.setRowId
+        WHERE sr.exerciseId = :exerciseId
+        ORDER BY le.date DESC, le.id DESC
+        """
+    )
+    fun observeExerciseHistory(exerciseId: Long): Flow<List<LogEntryEntity>>
+
+    @Query("SELECT name FROM exercise WHERE id = :exerciseId")
+    fun observeExerciseNameById(exerciseId: Long): Flow<String?>
+
+    @Query("SELECT id FROM set_row WHERE exerciseId = :exerciseId ORDER BY id LIMIT 1")
+    fun observeFirstSetRowId(exerciseId: Long): Flow<Long?>
+
     @Update
     suspend fun updateLogEntry(entry: LogEntryEntity)
 

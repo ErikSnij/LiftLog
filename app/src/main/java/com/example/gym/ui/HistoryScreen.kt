@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -45,38 +46,40 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gym.LiftLogApp
 import com.example.gym.data.BodyWeightEntity
 import com.example.gym.data.LogEntryEntity
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-private enum class Metric { WEIGHT, ONE_RM }
+private enum class Metric { WEIGHT, REPS_AT_MAX, ONE_RM }
 
 @Composable
-fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val dao = (LocalContext.current.applicationContext as LiftLogApp).database.dao()
     val scope = rememberCoroutineScope()
 
-    val history by remember(setRowId) { dao.observeSetRowHistory(setRowId) }
+    val history by remember(exerciseId) { dao.observeExerciseHistory(exerciseId) }
         .collectAsStateWithLifecycle(emptyList())
-    val name by remember(setRowId) { dao.observeExerciseNameForSetRow(setRowId) }
+    val name by remember(exerciseId) { dao.observeExerciseNameById(exerciseId) }
         .collectAsStateWithLifecycle(null)
-    val note by remember(setRowId) { dao.observeSetRow(setRowId).map { it?.note } }
+    val firstSetRowId by remember(exerciseId) { dao.observeFirstSetRowId(exerciseId) }
         .collectAsStateWithLifecycle(null)
     val bodyWeights by remember { dao.observeBodyWeightHistory() }
         .collectAsStateWithLifecycle(emptyList())
 
-    var metric by remember { mutableStateOf(Metric.WEIGHT) }
+    var metric by remember { mutableStateOf(Metric.REPS_AT_MAX) }
     var draft by remember { mutableStateOf<LogEntryEntity?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    fun newDraft() = LogEntryEntity(
-        setRowId = setRowId,
-        reps = history.firstOrNull()?.reps,
-        weight = history.firstOrNull()?.weight,
-        date = LocalDate.now(),
-    )
+    fun newDraft(): LogEntryEntity? {
+        val srId = firstSetRowId ?: return null
+        return LogEntryEntity(
+            setRowId = srId,
+            reps = history.firstOrNull()?.reps,
+            weight = history.firstOrNull()?.weight,
+            date = LocalDate.now(),
+        )
+    }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().imePadding()) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Top bar
         Row(
@@ -89,17 +92,13 @@ fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modif
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(name ?: "History", fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
-                if (!note.isNullOrBlank()) {
-                    Text(
-                        note!!,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
-            }
+            Text(
+                name ?: "History",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
         }
         HorizontalDivider()
 
@@ -116,6 +115,7 @@ fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modif
                 onRepsSelected = { draft = draft?.copy(reps = it) },
                 onWeightSelected = { draft = draft?.copy(weight = it) },
                 onDateShift = { days -> draft = draft?.let { it.copy(date = it.date.plusDays(days)) } },
+                onYearShift = { years -> draft = draft?.let { it.copy(date = it.date.plusYears(years)) } },
                 onSave = {
                     val isNew = d.id == 0L
                     scope.launch { if (isNew) dao.insertLogEntry(d) else dao.updateLogEntry(d) }
@@ -157,7 +157,7 @@ fun HistoryScreen(setRowId: Long, onBack: () -> Unit, modifier: Modifier = Modif
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .clickable { if (draft == null) draft = newDraft() }
+                    .clickable { if (draft == null) newDraft()?.let { draft = it } }
                     .padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
@@ -179,6 +179,7 @@ private fun MetricToggle(metric: Metric, onChange: (Metric) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         ToggleChip("Weight", metric == Metric.WEIGHT) { onChange(Metric.WEIGHT) }
+        ToggleChip("Reps @ Max", metric == Metric.REPS_AT_MAX) { onChange(Metric.REPS_AT_MAX) }
         ToggleChip("Est. 1RM", metric == Metric.ONE_RM) { onChange(Metric.ONE_RM) }
     }
 }
@@ -209,12 +210,16 @@ private fun ToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeights: List<BodyWeightEntity>) {
     val sortedBW = remember(bodyWeights) { bodyWeights.sortedBy { it.date } }
     val points = remember(history, metric, sortedBW) {
+        fun resolvedWeight(e: LogEntryEntity) = e.weight ?: sortedBW.lastOrNull { it.date <= e.date }?.weight
+        val maxWeightEver = if (metric == Metric.REPS_AT_MAX) history.mapNotNull(::resolvedWeight).maxOrNull() else null
         history.sortedBy { it.date }.mapNotNull { e ->
+            val w = resolvedWeight(e)
             val v = when (metric) {
-                Metric.WEIGHT -> e.weight ?: sortedBW.lastOrNull { it.date <= e.date }?.weight
-                Metric.ONE_RM -> {
-                    val w = e.weight ?: sortedBW.lastOrNull { it.date <= e.date }?.weight
-                    epley(e.reps, w)
+                Metric.WEIGHT -> w
+                Metric.ONE_RM -> epley(e.reps, w)
+                Metric.REPS_AT_MAX -> {
+                    val e1rm = epley(e.reps, w)
+                    if (e1rm != null && maxWeightEver != null) repsAtWeight(e1rm, maxWeightEver) else null
                 }
             }
             if (v != null) ChartPoint(e.date, v, e.reps) else null
@@ -371,6 +376,7 @@ private fun EntryEditor(
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
     onDateShift: (Long) -> Unit,
+    onYearShift: (Long) -> Unit,
     onSave: () -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit,
@@ -403,11 +409,15 @@ private fun EntryEditor(
             // Date: label above, steppers below so thumb doesn't cover it
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(formatDate(draft.date), fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    StepperButton("−1y") { onYearShift(-1) }
                     StepperButton("−1m") { onDateShift(-30) }
                     StepperButton("−1d") { onDateShift(-1) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
                     StepperButton("+1d") { onDateShift(1) }
                     StepperButton("+1m") { onDateShift(30) }
+                    StepperButton("+1y") { onYearShift(1) }
                 }
             }
         }
