@@ -200,7 +200,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                         }
                         for (group in category.muscleGroups) {
                             val groupCollapsed = group.id in vm.collapsedMuscleGroups
-                            item(key = muscleGroupKey(group.id)) {
+                            @Composable fun groupHeader() {
                                 MuscleGroupHeader(
                                     name = group.name,
                                     date = group.lastPerformed,
@@ -219,10 +219,21 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                                     onCollapseAllAreas = { vm.collapseAllAreasInGroup(group.id) },
                                 )
                             }
+                            // LazyColumn only keeps ONE sticky header active at a time — a second,
+                            // independent sticky item would just fight the first for the same pixels
+                            // (that's the overlap bug from the previous attempt). So when the group is
+                            // expanded, its header only appears bundled with each area below (one sticky
+                            // unit showing both levels together). When collapsed/empty, show it alone so
+                            // it's still visible and toggleable.
+                            if (groupCollapsed || group.areas.isEmpty()) {
+                                item(key = muscleGroupKey(group.id)) { groupHeader() }
+                            }
                         if (!groupCollapsed) {
                         for (area in group.areas) {
                             val areaCollapsed = area.id in vm.collapsedAreas
-                            item(key = areaKey(area.id)) {
+                            stickyHeader(key = areaKey(area.id)) {
+                                Column {
+                                groupHeader()
                                 AreaHeader(
                                     name = area.name,
                                     date = area.lastPerformed,
@@ -239,6 +250,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                                     onMoveUp = { vm.moveArea(area.id, -1) },
                                     onMoveDown = { vm.moveArea(area.id, 1) },
                                 )
+                                }
                             }
                             if (!areaCollapsed) {
                             for (exercise in area.exercises) {
