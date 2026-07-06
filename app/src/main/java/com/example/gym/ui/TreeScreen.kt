@@ -104,7 +104,12 @@ import java.time.LocalDate
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modifier: Modifier = Modifier) {
+fun TreeScreen(
+    onOpenHistory: (Long) -> Unit,
+    onOpenBodyWeight: () -> Unit,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val vm: TreeViewModel = viewModel()
     val tree by vm.tree.collectAsStateWithLifecycle()
     val showArchived = vm.showArchived
@@ -200,6 +205,7 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                     onAddCategory = vm::promptAddCategory,
                     onBodyWeight = onOpenBodyWeight,
                     onCollapseAll = vm::toggleCollapseAllMuscleGroups,
+                    onOpenSettings = onOpenSettings,
                 )
                 HorizontalDivider()
 
@@ -1284,6 +1290,7 @@ private fun TopBar(
     onAddCategory: () -> Unit,
     onBodyWeight: () -> Unit,
     onCollapseAll: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val caretColor = MaterialTheme.colorScheme.onSurface
@@ -1328,6 +1335,7 @@ private fun TopBar(
                 onExport = { menuOpen = false; onExport() },
                 onImport = { menuOpen = false; onImport() },
                 onToggleArchived = onToggleArchived,
+                onOpenSettings = { menuOpen = false; onOpenSettings() },
             )
         }
         Spacer(Modifier.weight(1f))
@@ -1383,6 +1391,7 @@ private fun AppMenu(
     onExport: () -> Unit,
     onImport: () -> Unit,
     onToggleArchived: (Boolean) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -1465,6 +1474,26 @@ private fun AppMenu(
                 onCheckedChange = onToggleArchived,
                 modifier = Modifier.scale(0.72f),
             )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(onClick = onOpenSettings)
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconChip { SettingsGlyph(it) }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("TrainHub sync", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    "Server URL and API key",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Spacer(Modifier.height(6.dp))
     }
@@ -1562,5 +1591,30 @@ private fun ArchiveGlyph(tint: Color) {
             strokeWidth = 1.8.dp.toPx(),
             cap = StrokeCap.Round,
         )
+    }
+}
+
+/** Simple gear glyph for the TrainHub sync settings row. */
+@Composable
+private fun SettingsGlyph(tint: Color) {
+    Canvas(modifier = Modifier.size(20.dp)) {
+        val w = size.width
+        val h = size.height
+        val cx = w * 0.5f
+        val cy = h * 0.5f
+        val s = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        drawCircle(tint, radius = w * 0.16f, center = androidx.compose.ui.geometry.Offset(cx, cy))
+        drawCircle(tint, radius = w * 0.34f, center = androidx.compose.ui.geometry.Offset(cx, cy), style = s)
+        val teeth = 6
+        repeat(teeth) { i ->
+            val angle = (2 * Math.PI * i / teeth).toFloat()
+            val innerR = w * 0.34f
+            val outerR = w * 0.44f
+            val x1 = cx + innerR * kotlin.math.cos(angle)
+            val y1 = cy + innerR * kotlin.math.sin(angle)
+            val x2 = cx + outerR * kotlin.math.cos(angle)
+            val y2 = cy + outerR * kotlin.math.sin(angle)
+            drawLine(tint, androidx.compose.ui.geometry.Offset(x1, y1), androidx.compose.ui.geometry.Offset(x2, y2), strokeWidth = 1.8.dp.toPx(), cap = StrokeCap.Round)
+        }
     }
 }

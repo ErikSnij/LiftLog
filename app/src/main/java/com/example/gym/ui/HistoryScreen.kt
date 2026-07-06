@@ -46,6 +46,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gym.LiftLogApp
 import com.example.gym.data.BodyWeightEntity
 import com.example.gym.data.LogEntryEntity
+import com.example.gym.data.SyncQueueEntity
+import com.example.gym.sync.TrainHubSyncWorker
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -53,7 +55,8 @@ private enum class Metric { WEIGHT, REPS_AT_MAX, ONE_RM }
 
 @Composable
 fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    val dao = (LocalContext.current.applicationContext as LiftLogApp).database.dao()
+    val context = LocalContext.current
+    val dao = (context.applicationContext as LiftLogApp).database.dao()
     val scope = rememberCoroutineScope()
 
     val history by remember(exerciseId) { dao.observeExerciseHistory(exerciseId) }
@@ -118,7 +121,17 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                 onYearShift = { years -> draft = draft?.let { it.copy(date = it.date.plusYears(years)) } },
                 onSave = {
                     val isNew = d.id == 0L
-                    scope.launch { if (isNew) dao.insertLogEntry(d) else dao.updateLogEntry(d) }
+                    // The entry may have been date-shifted — re-queue whichever day it used to
+                    // belong to as well, so that day's (now smaller) session gets re-delivered too.
+                    val previousDate = if (!isNew) history.find { it.id == d.id }?.date else null
+                    scope.launch {
+                        if (isNew) dao.insertLogEntry(d) else dao.updateLogEntry(d)
+                        dao.enqueueDateForSync(SyncQueueEntity(date = d.date))
+                        if (previousDate != null && previousDate != d.date) {
+                            dao.enqueueDateForSync(SyncQueueEntity(date = previousDate))
+                        }
+                        TrainHubSyncWorker.requestImmediateSync(context)
+                    }
                     draft = null
                 },
                 onDelete = {
@@ -126,13 +139,19 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                     draft = null
                     scope.launch {
                         dao.deleteLogEntry(deleted.id)
+                        dao.enqueueDateForSync(SyncQueueEntity(date = deleted.date))
+                        TrainHubSyncWorker.requestImmediateSync(context)
                         val res = snackbarHostState.showSnackbar(
                             message = "Entry deleted",
                             actionLabel = "Undo",
                             duration = SnackbarDuration.Short,
                         )
                         // Re-insert with the original id so the chart/history restore exactly.
-                        if (res == SnackbarResult.ActionPerformed) dao.insertLogEntry(deleted)
+                        if (res == SnackbarResult.ActionPerformed) {
+                            dao.insertLogEntry(deleted)
+                            dao.enqueueDateForSync(SyncQueueEntity(date = deleted.date))
+                            TrainHubSyncWorker.requestImmediateSync(context)
+                        }
                     }
                 },
                 onCancel = { draft = null },

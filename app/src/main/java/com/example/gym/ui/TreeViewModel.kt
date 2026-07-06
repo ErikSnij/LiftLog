@@ -302,7 +302,8 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
             if (existing != null) {
                 val updated = existing.copy(reps = state.reps, weight = state.weight)
                 dao.updateLogEntry(updated)
-                undoRequest = UndoRequest("Updated today's log") { dao.updateLogEntry(existing) }
+                enqueueSync(today)
+                undoRequest = UndoRequest("Updated today's log") { dao.updateLogEntry(existing); enqueueSync(today) }
             } else {
                 val id = dao.insertLogEntry(
                     com.example.gym.data.LogEntryEntity(
@@ -312,9 +313,16 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                         date = today,
                     ),
                 )
-                undoRequest = UndoRequest("Logged today") { dao.deleteLogEntry(id) }
+                enqueueSync(today)
+                undoRequest = UndoRequest("Logged today") { dao.deleteLogEntry(id); enqueueSync(today) }
             }
         }
+    }
+
+    /** Queues [date]'s session for TrainHub upload and nudges the sync worker to try right away. */
+    private suspend fun enqueueSync(date: LocalDate) {
+        dao.enqueueDateForSync(com.example.gym.data.SyncQueueEntity(date = date))
+        com.example.gym.sync.TrainHubSyncWorker.requestImmediateSync(getApplication())
     }
 
     /** Tap the ± cell → cycle NONE → UP → DOWN, persisted immediately. */

@@ -108,6 +108,22 @@ data class BodyWeightEntity(
 )
 
 /**
+ * One row per calendar date that has unsynced changes to upload to TrainHub. Logging (or
+ * editing/deleting) any entry on a date upserts this to synced=false; the periodic sync worker
+ * re-delivers the WHOLE day's session on every attempt (the server doesn't merge/diff), then
+ * flips synced=true only after a confirmed 201.
+ */
+@Entity(tableName = "sync_queue", indices = [Index("date", unique = true)])
+data class SyncQueueEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val date: LocalDate,
+    val synced: Boolean = false,
+    val attempts: Int = 0,
+    val lastAttemptAt: Long? = null,
+    val lastError: String? = null,
+)
+
+/**
  * One immutable logged data point for a set row. reps/weight are nullable: the seed contains
  * genuine nulls (bodyweight movements have no weight; one row has unknown reps).
  */

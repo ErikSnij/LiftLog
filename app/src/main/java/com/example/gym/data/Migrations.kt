@@ -147,5 +147,21 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/** v4 → v5: new `sync_queue` table tracking which dates still need to be uploaded to TrainHub. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `sync_queue` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`date` INTEGER NOT NULL, " +
+                "`synced` INTEGER NOT NULL DEFAULT 0, " +
+                "`attempts` INTEGER NOT NULL DEFAULT 0, " +
+                "`lastAttemptAt` INTEGER, " +
+                "`lastError` TEXT)",
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_sync_queue_date` ON `sync_queue` (`date`)")
+    }
+}
+
 /** Escape single quotes for inline SQL literals (none of our names use them, but be safe). */
 private fun String.sqlEscape(): String = replace("'", "''")

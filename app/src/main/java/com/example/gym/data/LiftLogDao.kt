@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -295,4 +296,40 @@ interface LiftLogDao {
 
     @Query("DELETE FROM body_weight")
     suspend fun deleteAllBodyWeights()
+
+    // ---- TrainHub sync queue ----------------------------------------------
+
+    /**
+     * Marks [date] as having unsynced changes. Upserts on the unique date index: if the date is
+     * already queued (even one already marked synced from a previous successful upload), this
+     * resets it back to pending with a clean attempt count, since the day's session content has
+     * changed and needs re-delivery.
+     */
+    @Upsert
+    suspend fun enqueueDateForSync(entry: SyncQueueEntity)
+
+    @Query("SELECT * FROM sync_queue WHERE synced = 0 ORDER BY date")
+    suspend fun pendingSyncs(): List<SyncQueueEntity>
+
+    @Query("UPDATE sync_queue SET synced = 1, lastError = NULL WHERE date = :date")
+    suspend fun markSynced(date: java.time.LocalDate)
+
+    @Query(
+        "UPDATE sync_queue SET attempts = attempts + 1, lastAttemptAt = :at, lastError = :error WHERE date = :date"
+    )
+    suspend fun recordSyncFailure(date: java.time.LocalDate, at: Long, error: String?)
+
+    /** Every logged set for [date], with exercise/note/flag context, for building a sync payload. */
+    @Query(
+        """
+        SELECT le.id AS id, le.setRowId AS setRowId, e.id AS exerciseId, e.name AS exerciseName,
+               le.reps AS reps, le.weight AS weight, le.date AS date, sr.note AS note, sr.flag AS flag
+        FROM log_entry le
+        JOIN set_row sr ON sr.id = le.setRowId
+        JOIN exercise e ON e.id = sr.exerciseId
+        WHERE le.date = :date
+        ORDER BY e.id, sr.id, le.id
+        """
+    )
+    suspend fun entriesForDate(date: java.time.LocalDate): List<SyncLogEntryRow>
 }
