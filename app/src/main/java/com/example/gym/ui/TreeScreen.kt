@@ -49,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,8 +70,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -134,6 +138,24 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
         initialFirstVisibleItemScrollOffset = vm.savedScrollOffset,
     )
 
+    val pinnedIdsMap = remember(tree, vm.collapsedMuscleGroups, vm.collapsedAreas, showArchived) {
+        buildPinnedIdsMap(tree, vm.collapsedMuscleGroups, vm.collapsedAreas, showArchived)
+    }
+    // No size filter this time — real headers always keep their natural height (just invisible
+    // when pinned), so visibleItemsInfo never gets distorted by a zero-height item and this
+    // stays in sync every frame, not just after an extra scroll nudge.
+    val pinnedIds by remember(pinnedIdsMap) {
+        derivedStateOf { pinnedIdsMap[listState.layoutInfo.visibleItemsInfo.firstOrNull()?.key as? String] }
+    }
+    val pinnedCategory = pinnedIds?.let { ids -> tree.categories.find { it.id == ids.categoryId } }
+    val pinnedGroup = pinnedIds?.muscleGroupId?.let { mgId ->
+        pinnedCategory?.muscleGroups?.find { it.id == mgId }
+    }
+    val pinnedArea = pinnedIds?.areaId?.let { aId -> pinnedGroup?.areas?.find { it.id == aId } }
+    val density = LocalDensity.current
+    var overlayHeightPx by remember { mutableStateOf(0) }
+
+
     // Scrolling the page dismisses a pending edit — so an accidental tap on a
     // value/date is easily shrugged off by just scrolling on.
     LaunchedEffect(listState) {
@@ -181,10 +203,19 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                 )
                 HorizontalDivider()
 
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f)) {
+                val overlayHeightDp = with(density) { overlayHeightPx.toDp() }
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().padding(top = overlayHeightDp),
+                ) {
                     for (category in tree.categories) {
-                        stickyHeader(key = categoryKey(category.id)) {
+                        item(key = categoryKey(category.id)) {
+                            // Invisible (not zero-height) whenever the overlay above is showing this
+                            // same category — keeping its real height means visibleItemsInfo never
+                            // gets distorted, so the overlay stays in sync every frame.
                             CategoryHeader(
+                                modifier = Modifier.alpha(if (pinnedCategory?.id == category.id) 0f else 1f),
                                 name = category.name,
                                 onAddMuscleGroup = { vm.promptAddMuscleGroup(category.id) },
                                 menuExpanded = vm.menuForCategory == category.id,
@@ -200,8 +231,9 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                         }
                         for (group in category.muscleGroups) {
                             val groupCollapsed = group.id in vm.collapsedMuscleGroups
-                            @Composable fun groupHeader() {
+                            item(key = muscleGroupKey(group.id)) {
                                 MuscleGroupHeader(
+                                    modifier = Modifier.alpha(if (pinnedGroup?.id == group.id) 0f else 1f),
                                     name = group.name,
                                     date = group.lastPerformed,
                                     collapsed = groupCollapsed,
@@ -219,38 +251,12 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                                     onCollapseAllAreas = { vm.collapseAllAreasInGroup(group.id) },
                                 )
                             }
-                            // LazyColumn only keeps ONE sticky header active at a time — a second,
-                            // independent sticky item would just fight the first for the same pixels
-                            // (that's the overlap bug from the previous attempt). So when the group is
-                            // expanded, its header only appears bundled with each area below (one sticky
-                            // unit showing both levels together). When collapsed/empty, show it alone so
-                            // it's still visible and toggleable.
-                            if (groupCollapsed || group.areas.isEmpty()) {
-                                item(key = muscleGroupKey(group.id)) { groupHeader() }
-                            }
                         if (!groupCollapsed) {
                         for (area in group.areas) {
                             val areaCollapsed = area.id in vm.collapsedAreas
-                            stickyHeader(key = areaKey(area.id)) {
-                                // Fixed content — always category + group + area. A version that
-                                // only shows the breadcrumb when this item is the active/pinned one
-                                // was tried and reverted: changing a stickyHeader's height based on
-                                // scroll-derived state causes Compose to not reflow the content below
-                                // it, so the header visibly overlapped the next row once it "woke up".
-                                Column {
-                                Text(
-                                    text = category.name.uppercase(),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(MaterialTheme.colorScheme.primaryContainer)
-                                        .padding(start = 12.dp, top = 2.dp, bottom = 2.dp),
-                                )
-                                groupHeader()
+                            item(key = areaKey(area.id)) {
                                 AreaHeader(
+                                    modifier = Modifier.alpha(if (pinnedArea?.id == area.id) 0f else 1f),
                                     name = area.name,
                                     date = area.lastPerformed,
                                     collapsed = areaCollapsed,
@@ -266,7 +272,6 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                                     onMoveUp = { vm.moveArea(area.id, -1) },
                                     onMoveDown = { vm.moveArea(area.id, 1) },
                                 )
-                                }
                             }
                             if (!areaCollapsed) {
                             for (exercise in area.exercises) {
@@ -331,6 +336,66 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
                         }  // if (!groupCollapsed)
                         }
                     }
+                }
+
+                // Pinned breadcrumb: shows the category/muscle-group/muscle owning whatever is
+                // currently topmost in the list. The LazyColumn above is padded down by exactly
+                // this Column's measured height, so real content can never render underneath it.
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .fillMaxWidth()
+                        .onGloballyPositioned { overlayHeightPx = it.size.height },
+                ) {
+                    pinnedCategory?.let { cat ->
+                        CategoryHeader(
+                            name = cat.name,
+                            onAddMuscleGroup = { vm.promptAddMuscleGroup(cat.id) },
+                            menuExpanded = vm.menuForCategory == cat.id,
+                            onLongPress = { vm.openCategoryMenu(cat.id) },
+                            onDismissMenu = vm::closeCategoryMenu,
+                            onRename = { vm.showDialog(TreeViewModel.RowDialog.RenameCategory(cat.id, cat.name)) },
+                            onDelete = { vm.deleteCategory(cat.id) },
+                            onMoveUp = { vm.moveCategory(cat.id, -1) },
+                            onMoveDown = { vm.moveCategory(cat.id, 1) },
+                        )
+                    }
+                    pinnedGroup?.let { group ->
+                        MuscleGroupHeader(
+                            name = group.name,
+                            date = group.lastPerformed,
+                            collapsed = group.id in vm.collapsedMuscleGroups,
+                            onToggle = { vm.toggleMuscleGroup(group.id) },
+                            onAddArea = { vm.promptAddArea(group.id) },
+                            menuExpanded = vm.menuForMuscleGroup == group.id,
+                            onLongPress = { vm.openMuscleGroupMenu(group.id) },
+                            onDismissMenu = vm::closeMuscleGroupMenu,
+                            onRename = {
+                                vm.showDialog(TreeViewModel.RowDialog.RenameMuscleGroup(group.id, group.name))
+                            },
+                            onDelete = { vm.deleteMuscleGroup(group.id) },
+                            onMoveUp = { vm.moveMuscleGroup(group.id, -1) },
+                            onMoveDown = { vm.moveMuscleGroup(group.id, 1) },
+                            onCollapseAllAreas = { vm.collapseAllAreasInGroup(group.id) },
+                        )
+                    }
+                    pinnedArea?.let { area ->
+                        AreaHeader(
+                            name = area.name,
+                            date = area.lastPerformed,
+                            collapsed = area.id in vm.collapsedAreas,
+                            onToggle = { vm.toggleArea(area.id) },
+                            onAddExercise = { vm.promptAddExercise(area.id) },
+                            menuExpanded = vm.menuForArea == area.id,
+                            onLongPress = { vm.openAreaMenu(area.id) },
+                            onDismissMenu = vm::closeAreaMenu,
+                            onRename = { vm.showDialog(TreeViewModel.RowDialog.RenameArea(area.id, area.name)) },
+                            onDelete = { vm.deleteArea(area.id) },
+                            onMoveUp = { vm.moveArea(area.id, -1) },
+                            onMoveDown = { vm.moveArea(area.id, 1) },
+                        )
+                    }
+                }
                 }
             }
         }
@@ -411,6 +476,42 @@ fun TreeScreen(onOpenHistory: (Long) -> Unit, onOpenBodyWeight: () -> Unit, modi
     }
 }
 
+/** Which category/muscle-group/muscle the topmost visible list item belongs to. */
+private data class PinnedIds(val categoryId: Long, val muscleGroupId: Long?, val areaId: Long?)
+
+/**
+ * Maps every item key emitted into the LazyColumn to its owning category/muscle-group/muscle,
+ * mirroring the exact skip logic (collapsed groups/areas, archived filter) used to build the
+ * list itself. Drives the pinned breadcrumb overlay: whichever category/group/muscle the
+ * topmost visible item belongs to is what the overlay shows.
+ */
+private fun buildPinnedIdsMap(
+    tree: TreeUi,
+    collapsedMuscleGroups: Set<Long>,
+    collapsedAreas: Set<Long>,
+    showArchived: Boolean,
+): Map<String, PinnedIds> {
+    val map = HashMap<String, PinnedIds>()
+    for (category in tree.categories) {
+        map[categoryKey(category.id)] = PinnedIds(category.id, null, null)
+        for (group in category.muscleGroups) {
+            map[muscleGroupKey(group.id)] = PinnedIds(category.id, group.id, null)
+            if (group.id in collapsedMuscleGroups) continue
+            for (area in group.areas) {
+                map[areaKey(area.id)] = PinnedIds(category.id, group.id, area.id)
+                if (area.id in collapsedAreas) continue
+                for (exercise in area.exercises) {
+                    if (!showArchived && exercise.archived) continue
+                    val ids = PinnedIds(category.id, group.id, area.id)
+                    if (exercise.setRows.isEmpty()) map[exerciseKey(exercise.id)] = ids
+                    exercise.setRows.forEach { row -> map["S${row.id}"] = ids }
+                }
+            }
+        }
+    }
+    return map
+}
+
 // ---- Headers (no folding; hierarchy conveyed by colour + indent) ---------
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -425,9 +526,10 @@ private fun CategoryHeader(
     onDelete: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // Sticky + opaque so the current category stays visible while scrolling.
-    Surface(color = MaterialTheme.colorScheme.primaryContainer) {
+    Surface(modifier = modifier, color = MaterialTheme.colorScheme.primaryContainer) {
         Box {
             Row(
                 modifier = Modifier
@@ -476,8 +578,9 @@ private fun MuscleGroupHeader(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onCollapseAllAreas: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Box {
+    Box(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -584,13 +687,14 @@ private fun AreaHeader(
     onDelete: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Box {
+    Box(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                // Opaque: this header is bundled into a sticky unit with the muscle-group
-                // header above it, so content scrolling underneath must not show through.
+                // Opaque: pinned via the breadcrumb overlay, so content scrolling
+                // underneath must not show through.
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
                 .padding(start = 22.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
