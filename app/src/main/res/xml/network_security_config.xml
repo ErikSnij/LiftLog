@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TrainHub's server address is user-entered at runtime (a Tailscale hostname/IP), so it can't be
+  pinned to a fixed domain here. It runs plain HTTP, not HTTPS — reasonable for a personal server
+  reachable only over the Tailscale WireGuard tunnel, but Android blocks cleartext traffic by
+  default since API 28, so it must be explicitly allowed.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

@@ -3,6 +3,13 @@ package com.example.gym.ui
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -347,59 +354,99 @@ fun TreeScreen(
                 // Pinned breadcrumb: shows the category/muscle-group/muscle owning whatever is
                 // currently topmost in the list. The LazyColumn above is padded down by exactly
                 // this Column's measured height, so real content can never render underneath it.
+                // Each level animates its own handoff (slide + fade) via AnimatedContent instead
+                // of an instant swap — native LazyColumn stickyHeader can't stack 3 independent
+                // levels with scroll-synced push physics (confirmed: a second stickyHeader just
+                // evicts the first), and hand-rolling exact pixel-synced push against internal
+                // LazyList offset semantics proved too fragile to ship reliably. This trades exact
+                // scroll-speed sync for a well-tested, low-risk animation primitive.
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
                         .onGloballyPositioned { overlayHeightPx = it.size.height },
                 ) {
-                    pinnedCategory?.let { cat ->
-                        CategoryHeader(
-                            name = cat.name,
-                            onAddMuscleGroup = { vm.promptAddMuscleGroup(cat.id) },
-                            menuExpanded = vm.menuForCategory == cat.id,
-                            onLongPress = { vm.openCategoryMenu(cat.id) },
-                            onDismissMenu = vm::closeCategoryMenu,
-                            onRename = { vm.showDialog(TreeViewModel.RowDialog.RenameCategory(cat.id, cat.name)) },
-                            onDelete = { vm.deleteCategory(cat.id) },
-                            onMoveUp = { vm.moveCategory(cat.id, -1) },
-                            onMoveDown = { vm.moveCategory(cat.id, 1) },
-                        )
+                    AnimatedContent(
+                        targetState = pinnedCategory?.id,
+                        transitionSpec = {
+                            (slideInVertically(tween(220)) { h -> h } + fadeIn(tween(220))) togetherWith
+                                (slideOutVertically(tween(180)) { h -> -h } + fadeOut(tween(180)))
+                        },
+                        label = "pinnedCategory",
+                    ) { id ->
+                        val cat = id?.let { catId -> tree.categories.find { it.id == catId } }
+                        if (cat != null) {
+                            CategoryHeader(
+                                name = cat.name,
+                                onAddMuscleGroup = { vm.promptAddMuscleGroup(cat.id) },
+                                menuExpanded = vm.menuForCategory == cat.id,
+                                onLongPress = { vm.openCategoryMenu(cat.id) },
+                                onDismissMenu = vm::closeCategoryMenu,
+                                onRename = {
+                                    vm.showDialog(TreeViewModel.RowDialog.RenameCategory(cat.id, cat.name))
+                                },
+                                onDelete = { vm.deleteCategory(cat.id) },
+                                onMoveUp = { vm.moveCategory(cat.id, -1) },
+                                onMoveDown = { vm.moveCategory(cat.id, 1) },
+                            )
+                        }
                     }
-                    pinnedGroup?.let { group ->
-                        MuscleGroupHeader(
-                            name = group.name,
-                            date = group.lastPerformed,
-                            collapsed = group.id in vm.collapsedMuscleGroups,
-                            onToggle = { vm.toggleMuscleGroup(group.id) },
-                            onAddArea = { vm.promptAddArea(group.id) },
-                            menuExpanded = vm.menuForMuscleGroup == group.id,
-                            onLongPress = { vm.openMuscleGroupMenu(group.id) },
-                            onDismissMenu = vm::closeMuscleGroupMenu,
-                            onRename = {
-                                vm.showDialog(TreeViewModel.RowDialog.RenameMuscleGroup(group.id, group.name))
-                            },
-                            onDelete = { vm.deleteMuscleGroup(group.id) },
-                            onMoveUp = { vm.moveMuscleGroup(group.id, -1) },
-                            onMoveDown = { vm.moveMuscleGroup(group.id, 1) },
-                            onCollapseAllAreas = { vm.collapseAllAreasInGroup(group.id) },
-                        )
+                    AnimatedContent(
+                        targetState = pinnedGroup?.id,
+                        transitionSpec = {
+                            (slideInVertically(tween(220)) { h -> h } + fadeIn(tween(220))) togetherWith
+                                (slideOutVertically(tween(180)) { h -> -h } + fadeOut(tween(180)))
+                        },
+                        label = "pinnedGroup",
+                    ) { id ->
+                        val group = id?.let { gId -> pinnedCategory?.muscleGroups?.find { it.id == gId } }
+                        if (group != null) {
+                            MuscleGroupHeader(
+                                name = group.name,
+                                date = group.lastPerformed,
+                                collapsed = group.id in vm.collapsedMuscleGroups,
+                                onToggle = { vm.toggleMuscleGroup(group.id) },
+                                onAddArea = { vm.promptAddArea(group.id) },
+                                menuExpanded = vm.menuForMuscleGroup == group.id,
+                                onLongPress = { vm.openMuscleGroupMenu(group.id) },
+                                onDismissMenu = vm::closeMuscleGroupMenu,
+                                onRename = {
+                                    vm.showDialog(TreeViewModel.RowDialog.RenameMuscleGroup(group.id, group.name))
+                                },
+                                onDelete = { vm.deleteMuscleGroup(group.id) },
+                                onMoveUp = { vm.moveMuscleGroup(group.id, -1) },
+                                onMoveDown = { vm.moveMuscleGroup(group.id, 1) },
+                                onCollapseAllAreas = { vm.collapseAllAreasInGroup(group.id) },
+                            )
+                        }
                     }
-                    pinnedArea?.let { area ->
-                        AreaHeader(
-                            name = area.name,
-                            date = area.lastPerformed,
-                            collapsed = area.id in vm.collapsedAreas,
-                            onToggle = { vm.toggleArea(area.id) },
-                            onAddExercise = { vm.promptAddExercise(area.id) },
-                            menuExpanded = vm.menuForArea == area.id,
-                            onLongPress = { vm.openAreaMenu(area.id) },
-                            onDismissMenu = vm::closeAreaMenu,
-                            onRename = { vm.showDialog(TreeViewModel.RowDialog.RenameArea(area.id, area.name)) },
-                            onDelete = { vm.deleteArea(area.id) },
-                            onMoveUp = { vm.moveArea(area.id, -1) },
-                            onMoveDown = { vm.moveArea(area.id, 1) },
-                        )
+                    AnimatedContent(
+                        targetState = pinnedArea?.id,
+                        transitionSpec = {
+                            (slideInVertically(tween(220)) { h -> h } + fadeIn(tween(220))) togetherWith
+                                (slideOutVertically(tween(180)) { h -> -h } + fadeOut(tween(180)))
+                        },
+                        label = "pinnedArea",
+                    ) { id ->
+                        val area = id?.let { aId -> pinnedGroup?.areas?.find { it.id == aId } }
+                        if (area != null) {
+                            AreaHeader(
+                                name = area.name,
+                                date = area.lastPerformed,
+                                collapsed = area.id in vm.collapsedAreas,
+                                onToggle = { vm.toggleArea(area.id) },
+                                onAddExercise = { vm.promptAddExercise(area.id) },
+                                menuExpanded = vm.menuForArea == area.id,
+                                onLongPress = { vm.openAreaMenu(area.id) },
+                                onDismissMenu = vm::closeAreaMenu,
+                                onRename = {
+                                    vm.showDialog(TreeViewModel.RowDialog.RenameArea(area.id, area.name))
+                                },
+                                onDelete = { vm.deleteArea(area.id) },
+                                onMoveUp = { vm.moveArea(area.id, -1) },
+                                onMoveDown = { vm.moveArea(area.id, 1) },
+                            )
+                        }
                     }
                 }
                 }
