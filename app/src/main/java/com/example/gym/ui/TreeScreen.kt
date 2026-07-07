@@ -169,14 +169,16 @@ fun TreeScreen(
     // Stable heights measured from the real (non-animated) headers in the list — NOT from the
     // animated overlay below. Using the overlay's own live size caused the list's top padding to
     // fluctuate every frame during a slide/fade transition, visibly dragging the whole list up
-    // and down in sync with the animation. These only change when a header's actual layout
-    // changes (e.g. text wraps differently), never mid-transition.
+    // and down in sync with the animation.
     var catHeightPx by remember { mutableIntStateOf(0) }
     var groupHeightPx by remember { mutableIntStateOf(0) }
     var areaHeightPx by remember { mutableIntStateOf(0) }
-    val overlayHeightPx = (if (pinnedCategory != null) catHeightPx else 0) +
-        (if (pinnedGroup != null) groupHeightPx else 0) +
-        (if (pinnedArea != null) areaHeightPx else 0)
+    // Deliberately NOT conditional on pinnedGroup/pinnedArea being active — reserving the full
+    // 3-level height unconditionally keeps this constant, so the list's padding never changes
+    // as you scroll and never needs a compensating scroll (which was correcting one frame late,
+    // still visible as a flash/jump). The cost is a blank gap in the overlay before a group/muscle
+    // has been reached — a small cosmetic tradeoff for a list that genuinely never moves on its own.
+    val overlayHeightPx = catHeightPx + groupHeightPx + areaHeightPx
 
 
     // Scrolling the page dismisses a pending edit — so an accidental tap on a
