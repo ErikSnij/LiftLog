@@ -58,6 +58,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -165,7 +166,17 @@ fun TreeScreen(
     }
     val pinnedArea = pinnedIds?.areaId?.let { aId -> pinnedGroup?.areas?.find { it.id == aId } }
     val density = LocalDensity.current
-    var overlayHeightPx by remember { mutableStateOf(0) }
+    // Stable heights measured from the real (non-animated) headers in the list — NOT from the
+    // animated overlay below. Using the overlay's own live size caused the list's top padding to
+    // fluctuate every frame during a slide/fade transition, visibly dragging the whole list up
+    // and down in sync with the animation. These only change when a header's actual layout
+    // changes (e.g. text wraps differently), never mid-transition.
+    var catHeightPx by remember { mutableIntStateOf(0) }
+    var groupHeightPx by remember { mutableIntStateOf(0) }
+    var areaHeightPx by remember { mutableIntStateOf(0) }
+    val overlayHeightPx = (if (pinnedCategory != null) catHeightPx else 0) +
+        (if (pinnedGroup != null) groupHeightPx else 0) +
+        (if (pinnedArea != null) areaHeightPx else 0)
 
 
     // Scrolling the page dismisses a pending edit — so an accidental tap on a
@@ -226,9 +237,12 @@ fun TreeScreen(
                         item(key = categoryKey(category.id)) {
                             // Invisible (not zero-height) whenever the overlay above is showing this
                             // same category — keeping its real height means visibleItemsInfo never
-                            // gets distorted, so the overlay stays in sync every frame.
+                            // gets distorted, so the overlay stays in sync every frame. Also reports
+                            // its natural height for the list's (non-animated) top padding.
                             CategoryHeader(
-                                modifier = Modifier.alpha(if (pinnedCategory?.id == category.id) 0f else 1f),
+                                modifier = Modifier
+                                    .onGloballyPositioned { catHeightPx = it.size.height }
+                                    .alpha(if (pinnedCategory?.id == category.id) 0f else 1f),
                                 name = category.name,
                                 onAddMuscleGroup = { vm.promptAddMuscleGroup(category.id) },
                                 menuExpanded = vm.menuForCategory == category.id,
@@ -246,7 +260,9 @@ fun TreeScreen(
                             val groupCollapsed = group.id in vm.collapsedMuscleGroups
                             item(key = muscleGroupKey(group.id)) {
                                 MuscleGroupHeader(
-                                    modifier = Modifier.alpha(if (pinnedGroup?.id == group.id) 0f else 1f),
+                                    modifier = Modifier
+                                        .onGloballyPositioned { groupHeightPx = it.size.height }
+                                        .alpha(if (pinnedGroup?.id == group.id) 0f else 1f),
                                     name = group.name,
                                     date = group.lastPerformed,
                                     collapsed = groupCollapsed,
@@ -269,7 +285,9 @@ fun TreeScreen(
                             val areaCollapsed = area.id in vm.collapsedAreas
                             item(key = areaKey(area.id)) {
                                 AreaHeader(
-                                    modifier = Modifier.alpha(if (pinnedArea?.id == area.id) 0f else 1f),
+                                    modifier = Modifier
+                                        .onGloballyPositioned { areaHeightPx = it.size.height }
+                                        .alpha(if (pinnedArea?.id == area.id) 0f else 1f),
                                     name = area.name,
                                     date = area.lastPerformed,
                                     collapsed = areaCollapsed,
@@ -352,8 +370,10 @@ fun TreeScreen(
                 }
 
                 // Pinned breadcrumb: shows the category/muscle-group/muscle owning whatever is
-                // currently topmost in the list. The LazyColumn above is padded down by exactly
-                // this Column's measured height, so real content can never render underneath it.
+                // currently topmost in the list. The LazyColumn above is padded by overlayHeightPx
+                // (stable per-level heights, computed above — deliberately NOT this Column's own
+                // live/animated size, which fluctuates during a transition and would otherwise drag
+                // the whole list up and down in sync with the animation).
                 // Each level animates its own handoff (slide + fade) via AnimatedContent instead
                 // of an instant swap — native LazyColumn stickyHeader can't stack 3 independent
                 // levels with scroll-synced push physics (confirmed: a second stickyHeader just
@@ -363,8 +383,7 @@ fun TreeScreen(
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .fillMaxWidth()
-                        .onGloballyPositioned { overlayHeightPx = it.size.height },
+                        .fillMaxWidth(),
                 ) {
                     AnimatedContent(
                         targetState = pinnedCategory?.id,
