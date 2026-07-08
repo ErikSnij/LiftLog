@@ -173,12 +173,28 @@ fun TreeScreen(
     var catHeightPx by remember { mutableIntStateOf(0) }
     var groupHeightPx by remember { mutableIntStateOf(0) }
     var areaHeightPx by remember { mutableIntStateOf(0) }
-    // Deliberately NOT conditional on pinnedGroup/pinnedArea being active — reserving the full
-    // 3-level height unconditionally keeps this constant, so the list's padding never changes
-    // as you scroll and never needs a compensating scroll (which was correcting one frame late,
-    // still visible as a flash/jump). The cost is a blank gap in the overlay before a group/muscle
-    // has been reached — a small cosmetic tradeoff for a list that genuinely never moves on its own.
-    val overlayHeightPx = catHeightPx + groupHeightPx + areaHeightPx
+    // Ramps from 0 up to the full 3-level reservation in lockstep with actual scroll distance
+    // from the very top of the list (item 0 = category header, item 1 = its first muscle group,
+    // item 2 = its first muscle — exactly the 3 levels this padding reserves space for). Because
+    // the padding grows by exactly the same number of pixels the list scrolls by, the padding
+    // change and the scroll cancel out with zero net movement on screen — unlike a discrete jump
+    // to a fixed padding value, there's nothing to visibly compensate for. Past item 2 (i.e. once
+    // you've scrolled at least past all 3 header levels) it's pinned at the full constant, which
+    // is what avoids the flash/jump a naive always-conditional padding had (see git history).
+    // This fixes the big blank gap that appeared when scrolled all the way to the top, where the
+    // full 3-level height used to be reserved even though nothing was actually pinned there yet.
+    val overlayHeightPx by remember {
+        derivedStateOf {
+            val reserved = catHeightPx + groupHeightPx + areaHeightPx
+            val scrolledPastTopPx = when (listState.firstVisibleItemIndex) {
+                0 -> listState.firstVisibleItemScrollOffset
+                1 -> catHeightPx + listState.firstVisibleItemScrollOffset
+                2 -> catHeightPx + groupHeightPx + listState.firstVisibleItemScrollOffset
+                else -> reserved
+            }
+            scrolledPastTopPx.coerceAtMost(reserved)
+        }
+    }
 
 
     // Scrolling the page dismisses a pending edit — so an accidental tap on a
