@@ -33,12 +33,16 @@ class TrainHubSyncWorker(context: Context, params: WorkerParameters) : Coroutine
         if (config == null) return Result.success() // not configured yet — nothing to do until the user sets it up
 
         val dao = app.database.dao()
-        val pending = dao.pendingSyncs()
-        if (pending.isEmpty()) return Result.success()
+        val pendingSessions = dao.pendingSyncs()
+        val pendingBodyMetrics = dao.pendingBodyMetricsSyncs()
+        if (pendingSessions.isEmpty() && pendingBodyMetrics.isEmpty()) return Result.success()
 
         var transientFailure = false
-        for (queued in pending) {
+        for (queued in pendingSessions) {
             transientFailure = transientFailure or deliverOne(dao, queued.date)
+        }
+        for (queued in pendingBodyMetrics) {
+            transientFailure = transientFailure or deliverBodyMetricsOne(dao, queued.date)
         }
         return if (transientFailure) Result.retry() else Result.success()
     }
@@ -92,6 +96,31 @@ class TrainHubSyncWorker(context: Context, params: WorkerParameters) : Coroutine
             }
         } catch (e: IOException) {
             dao.recordSyncFailure(date, System.currentTimeMillis(), e.message)
+            true
+        }
+    }
+
+    /** Delivers one date's body weight. Returns true if the failure was transient (worth a fast retry). */
+    private suspend fun deliverBodyMetricsOne(dao: LiftLogDao, date: LocalDate): Boolean {
+        val entry = dao.getBodyWeightForDate(date)
+        if (entry == null) {
+            // Deleted since it was queued — nothing left to report.
+            dao.markBodyMetricsSynced(date)
+            return false
+        }
+
+        val body = BodyMetricsRequest(date = date.toString(), weightKg = entry.weight)
+        return try {
+            val response = TrainHubClient.api.postBodyMetrics(body)
+            if (response.isSuccessful) {
+                dao.markBodyMetricsSynced(date)
+                false
+            } else {
+                dao.recordBodyMetricsSyncFailure(date, System.currentTimeMillis(), "HTTP ${response.code()}")
+                response.code() in 500..599
+            }
+        } catch (e: IOException) {
+            dao.recordBodyMetricsSyncFailure(date, System.currentTimeMillis(), e.message)
             true
         }
     }

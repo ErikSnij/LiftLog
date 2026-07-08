@@ -163,5 +163,49 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+/**
+ * v5 → v6: backfill `sync_queue` with every date that already has log entries. MIGRATION_4_5
+ * only created the (empty) table — nothing ever enqueued the dates that existed before TrainHub
+ * sync shipped, so only dates touched (logged/edited) after that point ever made it to the
+ * server. This queues every pre-existing date as unsynced so the worker picks them all up.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "INSERT INTO `sync_queue` (date, synced) " +
+                "SELECT DISTINCT date, 0 FROM `log_entry` " +
+                "WHERE date NOT IN (SELECT date FROM `sync_queue`)",
+        )
+    }
+}
+
+/**
+ * v6 → v7: new `body_metrics_sync_queue` table, mirroring `sync_queue` but for the separate
+ * `POST /body-metrics` endpoint. Backfilled with every existing `body_weight` date up front —
+ * MIGRATION_4_5 shipped without doing this for sync_queue and it silently orphaned pre-existing
+ * dates (see MIGRATION_5_6), so this one doesn't repeat that mistake.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `body_metrics_sync_queue` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`date` INTEGER NOT NULL, " +
+                "`synced` INTEGER NOT NULL DEFAULT 0, " +
+                "`attempts` INTEGER NOT NULL DEFAULT 0, " +
+                "`lastAttemptAt` INTEGER, " +
+                "`lastError` TEXT)",
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_body_metrics_sync_queue_date` " +
+                "ON `body_metrics_sync_queue` (`date`)",
+        )
+        db.execSQL(
+            "INSERT INTO `body_metrics_sync_queue` (date, synced) " +
+                "SELECT DISTINCT date, 0 FROM `body_weight`",
+        )
+    }
+}
+
 /** Escape single quotes for inline SQL literals (none of our names use them, but be safe). */
 private fun String.sqlEscape(): String = replace("'", "''")

@@ -58,8 +58,20 @@ data class StrengthSessionResponse(
     @SerialName("created_at") val createdAt: String,
 )
 
+/** Body shape confirmed against the backend's `POST /body-metrics` (no auth required, upserts by date). */
+@Serializable
+data class BodyMetricsRequest(
+    val date: String,
+    @SerialName("weight_kg") val weightKg: Float,
+    @SerialName("body_fat_pct") val bodyFatPct: Float? = null,
+    val source: String = "liftlog",
+)
+
 interface TrainHubApi {
     /** Auth header + host are applied per-request by TrainHubClient's interceptor. */
     @POST("strength-sessions")
     suspend fun postStrengthSession(@Body body: StrengthSessionRequest): Response<StrengthSessionResponse>
+
+    @POST("body-metrics")
+    suspend fun postBodyMetrics(@Body body: BodyMetricsRequest): Response<Unit>
 }

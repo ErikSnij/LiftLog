@@ -44,13 +44,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gym.LiftLogApp
+import com.example.gym.data.BodyMetricsSyncQueueEntity
 import com.example.gym.data.BodyWeightEntity
+import com.example.gym.sync.TrainHubSyncWorker
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 @Composable
 fun BodyWeightScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
-    val dao = (LocalContext.current.applicationContext as LiftLogApp).database.dao()
+    val context = LocalContext.current
+    val dao = (context.applicationContext as LiftLogApp).database.dao()
     val scope = rememberCoroutineScope()
 
     val history by remember { dao.observeBodyWeightHistory() }
@@ -107,7 +110,11 @@ fun BodyWeightScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     onSave = {
                         val toSave = d
                         draft = null
-                        scope.launch { dao.upsertBodyWeight(toSave) }
+                        scope.launch {
+                            dao.upsertBodyWeight(toSave)
+                            dao.enqueueDateForBodyMetricsSync(BodyMetricsSyncQueueEntity(date = toSave.date))
+                            TrainHubSyncWorker.requestImmediateSync(context)
+                        }
                     },
                     onDelete = {
                         val toDelete = d

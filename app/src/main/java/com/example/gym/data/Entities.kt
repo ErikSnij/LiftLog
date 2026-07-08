@@ -123,6 +123,17 @@ data class SyncQueueEntity(
     val lastError: String? = null,
 )
 
+/** Same pattern as [SyncQueueEntity] but for `POST /body-metrics` — a separate endpoint/queue. */
+@Entity(tableName = "body_metrics_sync_queue", indices = [Index("date", unique = true)])
+data class BodyMetricsSyncQueueEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val date: LocalDate,
+    val synced: Boolean = false,
+    val attempts: Int = 0,
+    val lastAttemptAt: Long? = null,
+    val lastError: String? = null,
+)
+
 /**
  * One immutable logged data point for a set row. reps/weight are nullable: the seed contains
  * genuine nulls (bodyweight movements have no weight; one row has unknown reps).

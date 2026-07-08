@@ -206,6 +206,10 @@ interface LiftLogDao {
     @Query("SELECT * FROM body_weight WHERE date <= :date ORDER BY date DESC LIMIT 1")
     suspend fun getBodyWeightAt(date: java.time.LocalDate): BodyWeightEntity?
 
+    /** Exact-date lookup used when building a body-metrics sync payload. */
+    @Query("SELECT * FROM body_weight WHERE date = :date LIMIT 1")
+    suspend fun getBodyWeightForDate(date: java.time.LocalDate): BodyWeightEntity?
+
     @Query("UPDATE exercise SET name = :name WHERE id = :exerciseId")
     suspend fun renameExercise(exerciseId: Long, name: String)
 
@@ -332,4 +336,21 @@ interface LiftLogDao {
         """
     )
     suspend fun entriesForDate(date: java.time.LocalDate): List<SyncLogEntryRow>
+
+    // ---- TrainHub body-metrics sync queue (separate from strength-session sync_queue above) ---
+
+    @Upsert
+    suspend fun enqueueDateForBodyMetricsSync(entry: BodyMetricsSyncQueueEntity)
+
+    @Query("SELECT * FROM body_metrics_sync_queue WHERE synced = 0 ORDER BY date")
+    suspend fun pendingBodyMetricsSyncs(): List<BodyMetricsSyncQueueEntity>
+
+    @Query("UPDATE body_metrics_sync_queue SET synced = 1, lastError = NULL WHERE date = :date")
+    suspend fun markBodyMetricsSynced(date: java.time.LocalDate)
+
+    @Query(
+        "UPDATE body_metrics_sync_queue SET attempts = attempts + 1, lastAttemptAt = :at, lastError = :error " +
+            "WHERE date = :date"
+    )
+    suspend fun recordBodyMetricsSyncFailure(date: java.time.LocalDate, at: Long, error: String?)
 }
