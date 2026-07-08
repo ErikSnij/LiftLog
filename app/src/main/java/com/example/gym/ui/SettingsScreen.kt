@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -101,7 +102,25 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(20.dp))
-                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    // Standalone — doesn't touch the fields above, so this is safe to tap any
+                    // time you've just turned Tailscale on and want to flush the sync queue
+                    // without re-entering the URL/key.
+                    OutlinedButton(
+                        onClick = {
+                            TrainHubSyncWorker.requestImmediateSync(context)
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Sync requested",
+                                    duration = SnackbarDuration.Short,
+                                )
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                    ) { Text("Sync now") }
                     Button(
                         onClick = {
                             scope.launch {
