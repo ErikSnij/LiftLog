@@ -10,6 +10,19 @@ import java.time.LocalDate
 /** Direction marker shown next to a set row: NONE → no marker, UP → +, DOWN → −. */
 enum class Flag { NONE, UP, DOWN }
 
+/**
+ * How an exercise's weight wheel/manual-entry values are generated.
+ * DEFAULT: the app's usual 0.5kg-step list (0..300).
+ * STEP: a fixed kg step (e.g. dumbbells = 2kg), optionally switching to a heavier step once a
+ * threshold weight is reached (e.g. barbells: 0.5kg below 50kg, 1kg at/above it).
+ * POUNDS: the equipment's real increments are in pounds (e.g. a machine stacked in 5lb plates);
+ * a starting weight + interval in lbs is converted to kg per entry and rounded per [WeightRoundMode].
+ */
+enum class WeightMode { DEFAULT, STEP, POUNDS }
+
+/** Rounding direction applied when converting a POUNDS-mode step to kg. */
+enum class WeightRoundMode { UP, DOWN, NEAREST }
+
 @Entity(tableName = "category")
 data class CategoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -74,6 +87,14 @@ data class ExerciseEntity(
     val areaId: Long,
     val name: String,
     val archived: Boolean = false,
+    // ---- Custom weight increments (null/DEFAULT = the app's normal 0.5kg-step wheel) ----
+    val weightMode: WeightMode = WeightMode.DEFAULT,
+    val weightStepKg: Float? = null,
+    val weightHeavyThresholdKg: Float? = null,
+    val weightHeavyStepKg: Float? = null,
+    val weightStartLbs: Float? = null,
+    val weightStepLbs: Float? = null,
+    val weightRoundMode: WeightRoundMode = WeightRoundMode.UP,
 )
 
 /**

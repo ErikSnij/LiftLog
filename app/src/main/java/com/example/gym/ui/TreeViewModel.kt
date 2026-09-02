@@ -10,6 +10,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.gym.LiftLogApp
 import com.example.gym.data.Flag
 import com.example.gym.data.LiftLogDao
+import com.example.gym.data.WeightConfig
+import com.example.gym.data.weightConfig
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -36,6 +38,7 @@ data class ExerciseUi(
     val lastPerformed: LocalDate?,
     val setRows: List<SetRowUi>,
     val archived: Boolean = false,
+    val weightConfig: WeightConfig = WeightConfig(),
 )
 
 data class AreaUi(
@@ -139,7 +142,14 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                                 archived = exercise.archived,
                             )
                         }
-                        ExerciseUi(exercise.id, exercise.name, exLastById[exercise.id], rowUis, exercise.archived)
+                        ExerciseUi(
+                            exercise.id,
+                            exercise.name,
+                            exLastById[exercise.id],
+                            rowUis,
+                            exercise.archived,
+                            exercise.weightConfig(),
+                        )
                     }.sortedWith(compareByDescending { it.lastPerformed })
                     AreaUi(area.id, area.name, areaLastById[area.id], exerciseUis)
                 }
@@ -347,6 +357,7 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         data class AddMuscleGroup(val categoryId: Long) : RowDialog
         data class AddArea(val muscleGroupId: Long) : RowDialog
         data class AddExercise(val areaId: Long) : RowDialog
+        data class WeightIncrements(val exerciseId: Long, val current: WeightConfig) : RowDialog
     }
 
     /** A reversible action surfaced via snackbar. */
@@ -431,6 +442,26 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
     fun promptAddMuscleGroup(categoryId: Long) { dialog = RowDialog.AddMuscleGroup(categoryId) }
     fun promptAddArea(muscleGroupId: Long) { dialog = RowDialog.AddArea(muscleGroupId) }
     fun promptAddExercise(areaId: Long) { dialog = RowDialog.AddExercise(areaId) }
+
+    fun promptWeightIncrements(exerciseId: Long, current: WeightConfig) {
+        showDialog(RowDialog.WeightIncrements(exerciseId, current))
+    }
+
+    fun saveWeightIncrements(exerciseId: Long, config: WeightConfig) {
+        dialog = null
+        viewModelScope.launch {
+            dao.updateWeightConfig(
+                exerciseId = exerciseId,
+                mode = config.mode,
+                stepKg = config.stepKg,
+                heavyThresholdKg = config.heavyThresholdKg,
+                heavyStepKg = config.heavyStepKg,
+                startLbs = config.startLbs,
+                stepLbs = config.stepLbs,
+                roundMode = config.roundMode,
+            )
+        }
+    }
 
     fun addCategory(name: String) {
         dialog = null

@@ -46,6 +46,15 @@ internal fun round1(value: Float): String = trimFloat(Math.round(value * 10f) / 
  * Inverts the Epley formula to ask "how many reps would this e1RM be at [targetWeight]?".
  * Anchoring to the heaviest weight ever lifted turns performance at any weight into a single
  * comparable rep count, so progress reads as a trend even as the working weight changes.
+ *
+ * A set weaker than the target weight for even a single rep would formally invert to a negative
+ * rep count, which reads as a chart glitch rather than "this was a light day". Below that point
+ * (e1RM < targetWeight) this instead returns e1RM/targetWeight — a small positive fraction that
+ * still shrinks the weaker the set was — trading the rep scale's accuracy below 1 for a plot
+ * that never dips below zero.
  */
-internal fun repsAtWeight(e1RM: Float, targetWeight: Float): Float? =
-    if (targetWeight > 0f) 30f * (e1RM / targetWeight - 1f) else null
+internal fun repsAtWeight(e1RM: Float, targetWeight: Float): Float? {
+    if (targetWeight <= 0f) return null
+    val ratio = e1RM / targetWeight
+    return if (ratio >= 1f) 30f * (ratio - 1f) else ratio
+}
