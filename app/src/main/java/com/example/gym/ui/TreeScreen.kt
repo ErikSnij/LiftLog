@@ -1435,7 +1435,7 @@ private fun WeightIncrementDialog(
                     WeightMode.POUNDS -> Column {
                         Text(
                             "The equipment's real increments, in pounds — converted to kg (rounded to " +
-                                "2 decimal places) since the app always displays weight in kg.",
+                                "1 decimal place) since the app always displays weight in kg.",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
