@@ -171,6 +171,34 @@ interface LiftLogDao {
     @Query("SELECT name FROM exercise WHERE id = :exerciseId")
     fun observeExerciseNameById(exerciseId: Long): Flow<String?>
 
+    /** Drives the weight wheel's step generation (see WeightMode) for the History screen editor. */
+    @Query("SELECT * FROM exercise WHERE id = :exerciseId")
+    fun observeExercise(exerciseId: Long): Flow<ExerciseEntity?>
+
+    @Query(
+        """
+        UPDATE exercise SET
+            weightMode = :mode,
+            weightStepKg = :stepKg,
+            weightHeavyThresholdKg = :heavyThresholdKg,
+            weightHeavyStepKg = :heavyStepKg,
+            weightStartLbs = :startLbs,
+            weightStepLbs = :stepLbs,
+            weightRoundMode = :roundMode
+        WHERE id = :exerciseId
+        """
+    )
+    suspend fun updateWeightConfig(
+        exerciseId: Long,
+        mode: WeightMode,
+        stepKg: Float?,
+        heavyThresholdKg: Float?,
+        heavyStepKg: Float?,
+        startLbs: Float?,
+        stepLbs: Float?,
+        roundMode: WeightRoundMode,
+    )
+
     @Query("SELECT id FROM set_row WHERE exerciseId = :exerciseId ORDER BY id LIMIT 1")
     fun observeFirstSetRowId(exerciseId: Long): Flow<Long?>
 

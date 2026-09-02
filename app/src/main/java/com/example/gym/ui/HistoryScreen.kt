@@ -47,6 +47,8 @@ import com.example.gym.LiftLogApp
 import com.example.gym.data.BodyWeightEntity
 import com.example.gym.data.LogEntryEntity
 import com.example.gym.data.SyncQueueEntity
+import com.example.gym.data.WeightConfig
+import com.example.gym.data.weightConfig
 import com.example.gym.sync.TrainHubSyncWorker
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -67,6 +69,9 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
         .collectAsStateWithLifecycle(null)
     val bodyWeights by remember { dao.observeBodyWeightHistory() }
         .collectAsStateWithLifecycle(emptyList())
+    val exercise by remember(exerciseId) { dao.observeExercise(exerciseId) }
+        .collectAsStateWithLifecycle(null)
+    val weightConfig = remember(exercise) { exercise?.weightConfig() ?: WeightConfig() }
 
     var metric by remember { mutableStateOf(Metric.REPS_AT_MAX) }
     var draft by remember { mutableStateOf<LogEntryEntity?>(null) }
@@ -115,6 +120,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
             EntryEditor(
                 draft = d,
                 isNew = d.id == 0L,
+                weightConfig = weightConfig,
                 onRepsSelected = { draft = draft?.copy(reps = it) },
                 onWeightSelected = { draft = draft?.copy(weight = it) },
                 onDateShift = { days -> draft = draft?.let { it.copy(date = it.date.plusDays(days)) } },
@@ -241,7 +247,7 @@ private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeig
                     if (e1rm != null && maxWeightEver != null) repsAtWeight(e1rm, maxWeightEver) else null
                 }
             }
-            if (v != null) ChartPoint(e.date, v, e.reps) else null
+            if (v != null) ChartPoint(e.date, v, e.reps, w) else null
         }
     }
 
@@ -331,9 +337,10 @@ private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeig
                 textAlign = android.graphics.Paint.Align.CENTER
             }
             points.forEachIndexed { i, p ->
-                val reps = p.reps?.let(::trimFloat) ?: "?"
+                val w = p.weight?.let(::trimFloat) ?: "BW"
+                val r = p.reps?.let(::trimFloat) ?: "?"
                 canvas.nativeCanvas.drawText(
-                    "${reps}r", offsets[i].x, offsets[i].y - dotR - with(density) { 3.dp.toPx() }, repPaint,
+                    "$w×$r", offsets[i].x, offsets[i].y - dotR - with(density) { 3.dp.toPx() }, repPaint,
                 )
             }
 
@@ -392,6 +399,7 @@ private fun EntryRow(entry: LogEntryEntity, selected: Boolean, onClick: () -> Un
 private fun EntryEditor(
     draft: LogEntryEntity,
     isNew: Boolean = false,
+    weightConfig: WeightConfig,
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
     onDateShift: (Long) -> Unit,
@@ -401,7 +409,7 @@ private fun EntryEditor(
     onCancel: () -> Unit,
 ) {
     val repsValues = remember { wheelValues(60f, step = 1f) }
-    val weightValues = remember { wheelValues(300f) }
+    val weightValues = remember(weightConfig) { weightWheelValues(weightConfig) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -485,7 +493,7 @@ private fun StepperButton(label: String, onClick: () -> Unit) {
     }
 }
 
-private data class ChartPoint(val date: LocalDate, val value: Float, val reps: Float?)
+private data class ChartPoint(val date: LocalDate, val value: Float, val reps: Float?, val weight: Float?)
 
 // android.graphics needs an ARGB int; bridge from Compose Color.
 private fun Color.toArgb(): Int = android.graphics.Color.argb(

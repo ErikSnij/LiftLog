@@ -18,6 +18,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -102,6 +103,9 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gym.data.Flag
+import com.example.gym.data.WeightConfig
+import com.example.gym.data.WeightMode
+import com.example.gym.data.WeightRoundMode
 import com.example.gym.data.seed.Exporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -197,11 +201,16 @@ fun TreeScreen(
     }
 
 
-    // Scrolling the page dismisses a pending edit — so an accidental tap on a
-    // value/date is easily shrugged off by just scrolling on.
+    // Scrolling the page dismisses a pending edit — so an accidental tap on a value/date is
+    // easily shrugged off by just scrolling on. Keyed on an actual touch-drag (not plain
+    // `isScrollInProgress`): opening the numeric keypad for manual entry focuses a text field,
+    // and the keyboard appearing makes the list auto-scroll that field into view — which also
+    // flips `isScrollInProgress` to true even though the user never touched the list, cancelling
+    // the edit out from under them the moment they tried to type a value.
+    val isDragged by listState.interactionSource.collectIsDraggedAsState()
     LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
-            if (scrolling && vm.edit != null) vm.cancelEdit()
+        snapshotFlow { isDragged }.collect { dragging ->
+            if (dragging && vm.edit != null) vm.cancelEdit()
         }
     }
 
@@ -337,6 +346,7 @@ fun TreeScreen(
                                         SetRowLine(
                                             // Name shows on the first row only; the rest wrap.
                                             exerciseName = if (index == 0) exercise.name else null,
+                                            weightConfig = exercise.weightConfig,
                                             row = row,
                                             edit = edit?.takeIf { it.setRowId == row.id },
                                             onValueTap = { vm.openWheels(row.id, row.reps, row.weight) },
@@ -376,6 +386,9 @@ fun TreeScreen(
                                             onResurrect = { vm.resurrect(exercise.id) },
                                             onDelete = { vm.deleteRow(row.id) },
                                             onDeleteExercise = { vm.deleteExercise(exercise.id) },
+                                            onWeightIncrements = {
+                                                vm.promptWeightIncrements(exercise.id, exercise.weightConfig)
+                                            },
                                         )
                                     }
                                 }
@@ -544,6 +557,11 @@ fun TreeScreen(
             title = "New exercise",
             initial = "",
             onConfirm = { vm.addExercise(d.areaId, it) },
+            onDismiss = vm::dismissDialog,
+        )
+        is TreeViewModel.RowDialog.WeightIncrements -> WeightIncrementDialog(
+            current = d.current,
+            onSave = { vm.saveWeightIncrements(d.exerciseId, it) },
             onDismiss = vm::dismissDialog,
         )
         null -> Unit
@@ -854,6 +872,7 @@ private fun ExerciseHeader(name: String, date: LocalDate?) {
 @Composable
 private fun SetRowLine(
     exerciseName: String?,
+    weightConfig: WeightConfig,
     row: SetRowUi,
     edit: TreeViewModel.EditState?,
     onValueTap: () -> Unit,
@@ -926,6 +945,7 @@ private fun SetRowLine(
                     modifier = Modifier.weight(1f),
                     reps = edit.reps,
                     weight = edit.weight,
+                    weightConfig = weightConfig,
                     onRepsSelected = onRepsSelected,
                     onWeightSelected = onWeightSelected,
                     onConfirm = onConfirm,
@@ -1067,6 +1087,7 @@ private fun WheelEditBar(
     modifier: Modifier,
     reps: Float?,
     weight: Float?,
+    weightConfig: WeightConfig,
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
     onConfirm: () -> Unit,
@@ -1095,6 +1116,7 @@ private fun WheelEditBar(
         ValueWheels(
             reps = reps,
             weight = weight,
+            weightConfig = weightConfig,
             onRepsSelected = onRepsSelected,
             onWeightSelected = onWeightSelected,
         )
@@ -1116,11 +1138,12 @@ private fun WheelEditBar(
 private fun ValueWheels(
     reps: Float?,
     weight: Float?,
+    weightConfig: WeightConfig,
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
 ) {
     val repsValues = remember { wheelValues(60f, step = 1f) }
-    val weightValues = remember { wheelValues(300f) }
+    val weightValues = remember(weightConfig) { weightWheelValues(weightConfig) }
     // Swallow stray taps so they don't bubble up and cancel the edit.
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1272,6 +1295,7 @@ private fun RowMenu(
     onResurrect: () -> Unit,
     onDelete: () -> Unit,
     onDeleteExercise: () -> Unit,
+    onWeightIncrements: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (archived) {
@@ -1280,6 +1304,9 @@ private fun RowMenu(
             DropdownMenuItem(text = { Text("Edit note") }, onClick = onEditNote)
             DropdownMenuItem(text = { Text("Rename exercise") }, onClick = onRename)
             DropdownMenuItem(text = { Text("Add set row") }, onClick = onAddSetRow)
+            if (isFirstRow) {
+                DropdownMenuItem(text = { Text("Weight increments…") }, onClick = onWeightIncrements)
+            }
             DropdownMenuItem(text = { Text("Archive") }, onClick = onArchive)
             // "Delete row" available on any row when there are multiple rows.
             if (rowCount > 1) {
@@ -1347,6 +1374,148 @@ private fun TextFieldDialog(
             }
         }
     }
+}
+
+/**
+ * Configures how an exercise's weight wheel/manual-entry values are generated — the app's usual
+ * 0.5kg steps don't match every piece of equipment (2kg dumbbell jumps, a barbell's plates
+ * getting coarser once you're loading serious weight, or a machine stacked in pounds).
+ */
+@Composable
+private fun WeightIncrementDialog(
+    current: WeightConfig,
+    onSave: (WeightConfig) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var mode by remember { mutableStateOf(current.mode) }
+    var stepKg by remember { mutableStateOf(current.stepKg?.let(::trimFloat) ?: "") }
+    var heavyThresholdKg by remember { mutableStateOf(current.heavyThresholdKg?.let(::trimFloat) ?: "") }
+    var heavyStepKg by remember { mutableStateOf(current.heavyStepKg?.let(::trimFloat) ?: "") }
+    var startLbs by remember { mutableStateOf(current.startLbs?.let(::trimFloat) ?: "") }
+    var stepLbs by remember { mutableStateOf(current.stepLbs?.let(::trimFloat) ?: "") }
+    var roundMode by remember { mutableStateOf(current.roundMode) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 4.dp,
+            shadowElevation = 12.dp,
+        ) {
+            Column(modifier = Modifier.padding(20.dp).imePadding()) {
+                Text("Weight increments", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ModeChip("Default", mode == WeightMode.DEFAULT) { mode = WeightMode.DEFAULT }
+                    ModeChip("Step", mode == WeightMode.STEP) { mode = WeightMode.STEP }
+                    ModeChip("Pounds", mode == WeightMode.POUNDS) { mode = WeightMode.POUNDS }
+                }
+                Spacer(Modifier.height(14.dp))
+                when (mode) {
+                    WeightMode.DEFAULT -> Text(
+                        "Uses the normal 0.5kg wheel.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    WeightMode.STEP -> Column {
+                        NumberField("Step (kg)", stepKg) { stepKg = it }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Optionally switch to a bigger step once the weight reaches a threshold " +
+                                "(e.g. a barbell: 0.5kg jumps below 50kg, 1kg from 50kg up).",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            NumberField("From (kg)", heavyThresholdKg, Modifier.weight(1f)) { heavyThresholdKg = it }
+                            NumberField("Bigger step (kg)", heavyStepKg, Modifier.weight(1f)) { heavyStepKg = it }
+                        }
+                    }
+                    WeightMode.POUNDS -> Column {
+                        Text(
+                            "The equipment's real increments, in pounds — converted to kg (rounded to " +
+                                "the nearest 0.5kg) since the app always displays weight in kg.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            NumberField("Starting weight (lbs)", startLbs, Modifier.weight(1f)) { startLbs = it }
+                            NumberField("Interval (lbs)", stepLbs, Modifier.weight(1f)) { stepLbs = it }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Text("Round", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ModeChip("Up", roundMode == WeightRoundMode.UP) { roundMode = WeightRoundMode.UP }
+                            ModeChip("Down", roundMode == WeightRoundMode.DOWN) { roundMode = WeightRoundMode.DOWN }
+                            ModeChip("Nearest", roundMode == WeightRoundMode.NEAREST) { roundMode = WeightRoundMode.NEAREST }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            onSave(
+                                WeightConfig(
+                                    mode = mode,
+                                    stepKg = stepKg.toFloatOrNull(),
+                                    heavyThresholdKg = heavyThresholdKg.toFloatOrNull(),
+                                    heavyStepKg = heavyStepKg.toFloatOrNull(),
+                                    startLbs = startLbs.toFloatOrNull(),
+                                    stepLbs = stepLbs.toFloatOrNull(),
+                                    roundMode = roundMode,
+                                ),
+                            )
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                    ) { Text("Save") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+    ) {
+        Text(
+            label,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun NumberField(label: String, value: String, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { onChange(it.replace(',', '.').filter { c -> c.isDigit() || c == '.' }) },
+        label = { Text(label, fontSize = 11.sp) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = modifier.fillMaxWidth(),
+    )
 }
 
 /** Build the export JSON, write to cache, and fire a share chooser. */

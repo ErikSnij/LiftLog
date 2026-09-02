@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,9 +59,12 @@ fun WheelPicker(
         }
     }
 
-    // Report the selection once scrolling settles.
+    // Report the selection once scrolling settles. `drop(1)` skips the initial (not-scrolling)
+    // emission every snapshotFlow fires immediately on collection — without it, simply opening
+    // the picker for a value that isn't an exact grid step (e.g. a manually-typed custom weight)
+    // would report the coerced starting index right away, silently overwriting that value.
     LaunchedEffect(state) {
-        snapshotFlow { state.isScrollInProgress }.collect { scrolling ->
+        snapshotFlow { state.isScrollInProgress }.drop(1).collect { scrolling ->
             if (!scrolling) onSelected(centeredIndex)
         }
     }
@@ -118,5 +122,18 @@ fun wheelValues(max: Float, step: Float = 0.5f): List<Float?> {
     }
 }
 
-fun indexOfValue(values: List<Float?>, value: Float?): Int =
-    values.indexOfFirst { it == value }.let { if (it >= 0) it else 0 }
+/**
+ * Index of [value] in [values], or — for a non-null value that isn't an exact grid step (e.g. a
+ * custom weight from a machine on a different increment than this wheel) — the index of the
+ * closest one, so the picker opens centered near the real value instead of snapping to the
+ * leading null/BW slot.
+ */
+fun indexOfValue(values: List<Float?>, value: Float?): Int {
+    val exact = values.indexOfFirst { it == value }
+    if (exact >= 0) return exact
+    if (value == null) return 0
+    return values.indices
+        .filter { values[it] != null }
+        .minByOrNull { kotlin.math.abs(values[it]!! - value) }
+        ?: 0
+}

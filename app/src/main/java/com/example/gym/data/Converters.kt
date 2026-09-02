@@ -15,4 +15,16 @@ class Converters {
 
     @TypeConverter
     fun nameToFlag(name: String?): Flag? = name?.let(Flag::valueOf)
+
+    @TypeConverter
+    fun weightModeToName(mode: WeightMode?): String? = mode?.name
+
+    @TypeConverter
+    fun nameToWeightMode(name: String?): WeightMode? = name?.let(WeightMode::valueOf)
+
+    @TypeConverter
+    fun roundModeToName(mode: WeightRoundMode?): String? = mode?.name
+
+    @TypeConverter
+    fun nameToRoundMode(name: String?): WeightRoundMode? = name?.let(WeightRoundMode::valueOf)
 }

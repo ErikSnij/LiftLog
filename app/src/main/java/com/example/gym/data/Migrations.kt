@@ -207,5 +207,22 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
     }
 }
 
+/**
+ * v7 → v8: per-exercise custom weight increments (dumbbells/barbells/machines whose real
+ * plates don't land on the app's default 0.5kg wheel steps). All nullable/defaulted so every
+ * existing exercise keeps behaving exactly like before (weightMode = 'DEFAULT').
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `exercise` ADD COLUMN `weightMode` TEXT NOT NULL DEFAULT 'DEFAULT'")
+        db.execSQL("ALTER TABLE `exercise` ADD COLUMN `weightStepKg` REAL")
+        db.execSQL("ALTER TABLE `exercise` ADD COLUMN `weightHeavyThresholdKg` REAL")
+        db.execSQL("ALTER TABLE `exercise` ADD COLUMN `weightHeavyStepKg` REAL")
+        db.execSQL("ALTER TABLE `exercise` ADD COLUMN `weightStartLbs` REAL")
+        db.execSQL("ALTER TABLE `exercise` ADD COLUMN `weightStepLbs` REAL")
+        db.execSQL("ALTER TABLE `exercise` ADD COLUMN `weightRoundMode` TEXT NOT NULL DEFAULT 'UP'")
+    }
+}
+
 /** Escape single quotes for inline SQL literals (none of our names use them, but be safe). */
 private fun String.sqlEscape(): String = replace("'", "''")
