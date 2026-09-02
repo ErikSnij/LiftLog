@@ -60,11 +60,12 @@ private fun poundsWeightValues(startLbs: Float, stepLbs: Float, round: WeightRou
     }
 
 /**
- * Converts [lbs] to kg, rounded to the nearest [precisionKg] (0.5kg by default — the app's usual
- * step) per [round]. This is what turns an ugly conversion like 5lb → 2.267...kg into a clean
- * grid value instead of an awkward in-between decimal.
+ * Converts [lbs] to kg, rounded to the nearest [precisionKg] (0.01kg by default — 2 decimal
+ * places) per [round]. Deliberately NOT snapped to the app's usual 0.5kg wheel step: a machine's
+ * real pin values (e.g. 5.7kg, 14.7kg) rarely land on that grid, so pounds-mode keeps the
+ * conversion's actual precision and only rounds off float noise beyond the second decimal.
  */
-internal fun poundsToKg(lbs: Float, round: WeightRoundMode, precisionKg: Float = 0.5f): Float {
+internal fun poundsToKg(lbs: Float, round: WeightRoundMode, precisionKg: Float = 0.01f): Float {
     val units = (lbs * KG_PER_LB) / precisionKg
     val roundedUnits = when (round) {
         WeightRoundMode.UP -> ceil(units)
