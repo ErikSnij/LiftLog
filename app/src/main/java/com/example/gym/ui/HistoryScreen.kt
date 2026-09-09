@@ -340,7 +340,7 @@ private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeig
                 val w = p.weight?.let(::trimFloat) ?: "BW"
                 val r = p.reps?.let(::trimFloat) ?: "?"
                 canvas.nativeCanvas.drawText(
-                    "$w×$r", offsets[i].x, offsets[i].y - dotR - with(density) { 3.dp.toPx() }, repPaint,
+                    "$r×$w", offsets[i].x, offsets[i].y - dotR - with(density) { 3.dp.toPx() }, repPaint,
                 )
             }
 
