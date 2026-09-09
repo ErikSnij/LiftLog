@@ -28,10 +28,13 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -389,6 +392,7 @@ fun TreeScreen(
                                             onWeightIncrements = {
                                                 vm.promptWeightIncrements(exercise.id, exercise.weightConfig)
                                             },
+                                            onMoveExercise = { vm.promptMoveExercise(exercise.id) },
                                         )
                                     }
                                 }
@@ -562,6 +566,14 @@ fun TreeScreen(
         is TreeViewModel.RowDialog.WeightIncrements -> WeightIncrementDialog(
             current = d.current,
             onSave = { vm.saveWeightIncrements(d.exerciseId, it) },
+            onDismiss = vm::dismissDialog,
+        )
+        is TreeViewModel.RowDialog.MoveExercise -> MoveExerciseDialog(
+            exerciseId = d.exerciseId,
+            tree = tree,
+            onMove = { areaId -> vm.moveExercise(d.exerciseId, areaId) },
+            onCreateMuscleGroup = vm::createMuscleGroupForMove,
+            onCreateArea = vm::createAreaForMove,
             onDismiss = vm::dismissDialog,
         )
         null -> Unit
@@ -1296,6 +1308,7 @@ private fun RowMenu(
     onDelete: () -> Unit,
     onDeleteExercise: () -> Unit,
     onWeightIncrements: () -> Unit,
+    onMoveExercise: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (archived) {
@@ -1306,6 +1319,7 @@ private fun RowMenu(
             DropdownMenuItem(text = { Text("Add set row") }, onClick = onAddSetRow)
             if (isFirstRow) {
                 DropdownMenuItem(text = { Text("Weight increments…") }, onClick = onWeightIncrements)
+                DropdownMenuItem(text = { Text("Move to muscle group…") }, onClick = onMoveExercise)
             }
             DropdownMenuItem(text = { Text("Archive") }, onClick = onArchive)
             // "Delete row" available on any row when there are multiple rows.
@@ -1480,6 +1494,200 @@ private fun WeightIncrementDialog(
                     ) { Text("Save") }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Re-parents an exercise to a different muscle (area), cascading category → muscle group → muscle
+ * so the move is always into a valid, fully-specified location. Either level below the category
+ * can be created inline (name field + Add) instead of picking an existing one, so a genuinely new
+ * grouping doesn't require leaving this dialog first.
+ */
+@Composable
+private fun MoveExerciseDialog(
+    exerciseId: Long,
+    tree: TreeUi,
+    onMove: (areaId: Long) -> Unit,
+    onCreateMuscleGroup: suspend (categoryId: Long, name: String) -> Long,
+    onCreateArea: suspend (muscleGroupId: Long, name: String) -> Long,
+    onDismiss: () -> Unit,
+) {
+    val currentLocation = remember(exerciseId, tree) {
+        tree.categories.firstNotNullOfOrNull { cat ->
+            cat.muscleGroups.firstNotNullOfOrNull { group ->
+                group.areas.firstNotNullOfOrNull { area ->
+                    if (area.exercises.any { it.id == exerciseId }) Triple(cat.id, group.id, area.id) else null
+                }
+            }
+        }
+    }
+    var selectedCategoryId by remember { mutableStateOf(currentLocation?.first) }
+    var selectedGroupId by remember { mutableStateOf(currentLocation?.second) }
+    var selectedAreaId by remember { mutableStateOf(currentLocation?.third) }
+    var newGroupName by remember { mutableStateOf("") }
+    var newAreaName by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+
+    val selectedCategory = tree.categories.find { it.id == selectedCategoryId }
+    val selectedGroup = selectedCategory?.muscleGroups?.find { it.id == selectedGroupId }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 4.dp,
+            shadowElevation = 12.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .imePadding()
+                    .heightIn(max = 480.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text("Move exercise", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(14.dp))
+
+                Text("Category", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    tree.categories.forEach { cat ->
+                        ModeChip(cat.name, selectedCategoryId == cat.id) {
+                            selectedCategoryId = cat.id
+                            selectedGroupId = null
+                            selectedAreaId = null
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Text("Muscle group", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                if (selectedCategory == null) {
+                    Text(
+                        "Pick a category first.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Column {
+                        selectedCategory.muscleGroups.forEach { group ->
+                            PickRow(group.name, selectedGroupId == group.id) {
+                                selectedGroupId = group.id
+                                selectedAreaId = null
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = newGroupName,
+                            onValueChange = { newGroupName = it },
+                            placeholder = { Text("New muscle group", fontSize = 12.sp) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = {
+                                val name = newGroupName.trim().ifEmpty { return@TextButton }
+                                val categoryId = selectedCategoryId ?: return@TextButton
+                                scope.launch {
+                                    val id = onCreateMuscleGroup(categoryId, name)
+                                    selectedGroupId = id
+                                    selectedAreaId = null
+                                    newGroupName = ""
+                                }
+                            },
+                        ) { Text("Add") }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Text("Muscle", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                if (selectedGroup == null) {
+                    Text(
+                        "Pick a muscle group first.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Column {
+                        selectedGroup.areas.forEach { area ->
+                            PickRow(area.name, selectedAreaId == area.id) { selectedAreaId = area.id }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = newAreaName,
+                            onValueChange = { newAreaName = it },
+                            placeholder = { Text("New muscle", fontSize = 12.sp) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = {
+                                val name = newAreaName.trim().ifEmpty { return@TextButton }
+                                val groupId = selectedGroupId ?: return@TextButton
+                                scope.launch {
+                                    val id = onCreateArea(groupId, name)
+                                    selectedAreaId = id
+                                    newAreaName = ""
+                                }
+                            },
+                        ) { Text("Add") }
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = { selectedAreaId?.let(onMove) },
+                        enabled = selectedAreaId != null,
+                        shape = RoundedCornerShape(12.dp),
+                    ) { Text("Move") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PickRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        if (selected) {
+            Text("✓", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
         }
     }
 }

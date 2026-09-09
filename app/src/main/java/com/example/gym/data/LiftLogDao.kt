@@ -241,6 +241,10 @@ interface LiftLogDao {
     @Query("UPDATE exercise SET name = :name WHERE id = :exerciseId")
     suspend fun renameExercise(exerciseId: Long, name: String)
 
+    /** Re-parents an exercise to a different muscle (area) — used to move it to another muscle group. */
+    @Query("UPDATE exercise SET areaId = :areaId WHERE id = :exerciseId")
+    suspend fun updateExerciseArea(exerciseId: Long, areaId: Long)
+
     @Query("UPDATE area SET name = :name WHERE id = :areaId")
     suspend fun renameArea(areaId: Long, name: String)
 

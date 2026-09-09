@@ -376,6 +376,7 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         data class AddArea(val muscleGroupId: Long) : RowDialog
         data class AddExercise(val areaId: Long) : RowDialog
         data class WeightIncrements(val exerciseId: Long, val current: WeightConfig) : RowDialog
+        data class MoveExercise(val exerciseId: Long) : RowDialog
     }
 
     /** A reversible action surfaced via snackbar. */
@@ -479,6 +480,32 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                 roundMode = config.roundMode,
             )
         }
+    }
+
+    fun promptMoveExercise(exerciseId: Long) {
+        showDialog(RowDialog.MoveExercise(exerciseId))
+    }
+
+    fun moveExercise(exerciseId: Long, newAreaId: Long) {
+        dialog = null
+        viewModelScope.launch { dao.updateExerciseArea(exerciseId, newAreaId) }
+    }
+
+    /** Creates a muscle group inline from the move-exercise dialog, returning its new id. */
+    suspend fun createMuscleGroupForMove(categoryId: Long, name: String): Long {
+        val sortOrder = tree.value.categories.find { it.id == categoryId }?.muscleGroups?.size ?: 0
+        return dao.insertMuscleGroup(
+            com.example.gym.data.MuscleGroupEntity(categoryId = categoryId, name = name, sortOrder = sortOrder),
+        )
+    }
+
+    /** Creates a muscle (area) inline from the move-exercise dialog, returning its new id. */
+    suspend fun createAreaForMove(muscleGroupId: Long, name: String): Long {
+        val sortOrder = tree.value.categories.flatMap { it.muscleGroups }
+            .find { it.id == muscleGroupId }?.areas?.size ?: 0
+        return dao.insertArea(
+            com.example.gym.data.AreaEntity(muscleGroupId = muscleGroupId, name = name, sortOrder = sortOrder),
+        )
     }
 
     fun addCategory(name: String) {
