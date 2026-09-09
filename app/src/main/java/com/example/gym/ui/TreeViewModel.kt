@@ -213,6 +213,24 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         else allIds
     }
 
+    // Both collapsible levels start fully collapsed on first load (once, when real data first
+    // arrives) — after that this never fires again, so it doesn't fight the user's own
+    // expand/collapse taps on later tree updates (e.g. adding a new exercise).
+    private var defaultCollapseApplied = false
+
+    init {
+        viewModelScope.launch {
+            tree.collect { t ->
+                if (!defaultCollapseApplied && t.loaded) {
+                    defaultCollapseApplied = true
+                    val allGroups = t.categories.flatMap { it.muscleGroups }
+                    collapsedMuscleGroups = allGroups.map { it.id }.toSet()
+                    collapsedAreas = allGroups.flatMap { it.areas }.map { it.id }.toSet()
+                }
+            }
+        }
+    }
+
     fun collapseAllAreasInGroup(muscleGroupId: Long) {
         val group = tree.value.categories.flatMap { it.muscleGroups }.find { it.id == muscleGroupId }
         val areaIds = group?.areas?.map { it.id }?.toSet() ?: return

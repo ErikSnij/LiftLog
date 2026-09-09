@@ -64,13 +64,18 @@ private fun poundsWeightValues(startLbs: Float, stepLbs: Float, round: WeightRou
  * place) per [round]. Deliberately NOT snapped to the app's usual 0.5kg wheel step: a machine's
  * real pin values (e.g. 5.7kg, 14.7kg) rarely land on that grid, so pounds-mode keeps the
  * conversion's actual precision and only rounds off float noise beyond the first decimal.
+ *
+ * [precisionKg] is a Double (not Float) on purpose: e.g. 57 * 0.1f lands one float ULP away
+ * from the actual nearest float to 5.7 (0.1f's own rounding error compounds into the product),
+ * printing as "5.7000003" instead of "5.7". A genuine Double literal for 0.1 is precise enough
+ * that the single final rounding to Float lands on the correct value.
  */
-internal fun poundsToKg(lbs: Float, round: WeightRoundMode, precisionKg: Float = 0.1f): Float {
-    val units = (lbs * KG_PER_LB) / precisionKg
+internal fun poundsToKg(lbs: Float, round: WeightRoundMode, precisionKg: Double = 0.1): Float {
+    val units = (lbs.toDouble() * KG_PER_LB) / precisionKg
     val roundedUnits = when (round) {
         WeightRoundMode.UP -> ceil(units)
         WeightRoundMode.DOWN -> floor(units)
-        WeightRoundMode.NEAREST -> units.roundToInt().toFloat()
+        WeightRoundMode.NEAREST -> units.roundToInt().toDouble()
     }
-    return roundedUnits * precisionKg
+    return (roundedUnits * precisionKg).toFloat()
 }
