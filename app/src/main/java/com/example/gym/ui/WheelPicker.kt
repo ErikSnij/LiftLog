@@ -59,14 +59,20 @@ fun WheelPicker(
         }
     }
 
-    // Report the selection once scrolling settles. `drop(1)` skips the initial (not-scrolling)
-    // emission every snapshotFlow fires immediately on collection — without it, simply opening
-    // the picker for a value that isn't an exact grid step (e.g. a manually-typed custom weight)
-    // would report the coerced starting index right away, silently overwriting that value.
+    // Report the selection whenever centeredIndex itself changes, rather than watching
+    // isScrollInProgress for a settle: snapshotFlow only guarantees delivering the latest value,
+    // not every intermediate one, so a quick, short scroll (settle happening within a couple of
+    // frames — e.g. nudging reps from 7 to 9) can have its true→false transition collapse away
+    // entirely before the collector next resumes, silently dropping the report even though the
+    // wheel visibly (and correctly) settled — the picker looks right but the pending value never
+    // updates, so confirming later saves the old number. centeredIndex has no such gap: it's a
+    // live layout-derived value, and once scrolling truly stops it stays put, so the collector is
+    // guaranteed to eventually observe that final value even if some earlier ones were coalesced.
+    // `drop(1)` skips only the very first (mount-time) emission — without it, simply opening the
+    // picker for a value that isn't an exact grid step (e.g. a manually-typed custom weight) would
+    // report the coerced starting index right away, silently overwriting that value.
     LaunchedEffect(state) {
-        snapshotFlow { state.isScrollInProgress }.drop(1).collect { scrolling ->
-            if (!scrolling) onSelected(centeredIndex)
-        }
+        snapshotFlow { centeredIndex }.drop(1).collect { index -> onSelected(index) }
     }
 
     Box(modifier = modifier.height(itemHeight * visibleCount), contentAlignment = Alignment.Center) {
