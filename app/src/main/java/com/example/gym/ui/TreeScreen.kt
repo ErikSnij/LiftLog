@@ -21,6 +21,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,7 +52,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
@@ -232,7 +232,7 @@ fun TreeScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { SwipeDismissSnackbarHost(snackbarHostState) },
     ) { inner ->
         Box(
             modifier = Modifier
@@ -262,6 +262,10 @@ fun TreeScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize().padding(top = overlayHeightDp),
+                    // Extra bottom space so the last row can be scrolled up away from the very
+                    // bottom edge — otherwise there's nowhere comfortable to see/reach its inline
+                    // wheel editor once it opens.
+                    contentPadding = PaddingValues(bottom = 260.dp),
                 ) {
                     for (category in tree.categories) {
                         item(key = categoryKey(category.id)) {

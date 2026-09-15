@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
@@ -193,7 +192,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
             }
         }
     }
-        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+        SwipeDismissSnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -303,14 +302,19 @@ private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeig
             textSize = labelSp; isAntiAlias = true; color = labelColor.toArgb()
             textAlign = android.graphics.Paint.Align.RIGHT
         }
-        val gridInts = if (minV == maxV) listOf(Math.round(minV))
-            else listOf(Math.round(yLo), Math.round((yLo + yHi) / 2f), Math.round(yHi)).distinct()
+        // The bottom gridline sits exactly at the x-axis (yOf(yLo) == cBottom), so it's rounded up
+        // to the nearest half instead of to the nearest whole number — rounding to nearest could
+        // land below yLo (whenever yLo's fractional part is under .5), drawing that line/label
+        // below the x-axis instead of at or above it.
+        val bottomGrid = kotlin.math.ceil(yLo * 2f) / 2f
+        val gridValues = if (minV == maxV) listOf(Math.round(minV).toFloat())
+            else listOf(bottomGrid, Math.round((yLo + yHi) / 2f).toFloat(), Math.round(yHi).toFloat()).distinct()
         drawIntoCanvas { canvas ->
-            gridInts.forEach { v ->
-                val gy = yOf(v.toFloat())
+            gridValues.forEach { v ->
+                val gy = yOf(v)
                 drawLine(axisColor.copy(alpha = 0.35f), Offset(cLeft, gy), Offset(cRight, gy), strokeWidth = 1f)
                 canvas.nativeCanvas.drawText(
-                    "$v",
+                    trimFloat(v),
                     cLeft - with(density) { 5.dp.toPx() },
                     gy + labelSp * 0.35f,
                     yLabelPaint,
