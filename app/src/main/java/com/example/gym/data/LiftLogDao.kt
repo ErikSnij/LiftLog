@@ -202,6 +202,17 @@ interface LiftLogDao {
     @Query("SELECT id FROM set_row WHERE exerciseId = :exerciseId ORDER BY id LIMIT 1")
     fun observeFirstSetRowId(exerciseId: Long): Flow<Long?>
 
+    /** Every non-null weight ever logged for this exercise, across all its set rows — feeds the
+     *  "Guess from history" weight-increment detector. */
+    @Query(
+        """
+        SELECT le.weight FROM log_entry le
+        JOIN set_row sr ON sr.id = le.setRowId
+        WHERE sr.exerciseId = :exerciseId AND le.weight IS NOT NULL
+        """
+    )
+    suspend fun weightHistoryForExercise(exerciseId: Long): List<Float>
+
     @Update
     suspend fun updateLogEntry(entry: LogEntryEntity)
 

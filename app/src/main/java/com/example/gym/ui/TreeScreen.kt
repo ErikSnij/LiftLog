@@ -570,6 +570,7 @@ fun TreeScreen(
         is TreeViewModel.RowDialog.WeightIncrements -> WeightIncrementDialog(
             current = d.current,
             onSave = { vm.saveWeightIncrements(d.exerciseId, it) },
+            onGuess = { vm.guessWeightConfigFor(d.exerciseId) },
             onDismiss = vm::dismissDialog,
         )
         is TreeViewModel.RowDialog.MoveExercise -> MoveExerciseDialog(
@@ -1394,6 +1395,8 @@ private fun TextFieldDialog(
     }
 }
 
+private enum class GuessState { Idle, Guessing, NoPattern }
+
 /**
  * Configures how an exercise's weight wheel/manual-entry values are generated — the app's usual
  * 0.5kg steps don't match every piece of equipment (2kg dumbbell jumps, a barbell's plates
@@ -1403,6 +1406,7 @@ private fun TextFieldDialog(
 private fun WeightIncrementDialog(
     current: WeightConfig,
     onSave: (WeightConfig) -> Unit,
+    onGuess: suspend () -> WeightConfig?,
     onDismiss: () -> Unit,
 ) {
     var mode by remember { mutableStateOf(current.mode) }
@@ -1412,6 +1416,8 @@ private fun WeightIncrementDialog(
     var startLbs by remember { mutableStateOf(current.startLbs?.let(::trimFloat) ?: "") }
     var stepLbs by remember { mutableStateOf(current.stepLbs?.let(::trimFloat) ?: "") }
     var roundMode by remember { mutableStateOf(current.roundMode) }
+    var guessState by remember { mutableStateOf<GuessState>(GuessState.Idle) }
+    val scope = rememberCoroutineScope()
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1421,7 +1427,44 @@ private fun WeightIncrementDialog(
             shadowElevation = 12.dp,
         ) {
             Column(modifier = Modifier.padding(20.dp).imePadding()) {
-                Text("Weight increments", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Weight increments", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Guess from history",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable(enabled = guessState != GuessState.Guessing) {
+                            guessState = GuessState.Guessing
+                            scope.launch {
+                                val guess = onGuess()
+                                if (guess != null) {
+                                    mode = guess.mode
+                                    stepKg = guess.stepKg?.let(::trimFloat) ?: ""
+                                    heavyThresholdKg = guess.heavyThresholdKg?.let(::trimFloat) ?: ""
+                                    heavyStepKg = guess.heavyStepKg?.let(::trimFloat) ?: ""
+                                    startLbs = guess.startLbs?.let(::trimFloat) ?: ""
+                                    stepLbs = guess.stepLbs?.let(::trimFloat) ?: ""
+                                    roundMode = guess.roundMode
+                                    guessState = GuessState.Idle
+                                } else {
+                                    guessState = GuessState.NoPattern
+                                }
+                            }
+                        },
+                    )
+                }
+                if (guessState == GuessState.NoPattern) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Not enough of a consistent pattern in this exercise's history to guess an interval.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ModeChip("Default", mode == WeightMode.DEFAULT) { mode = WeightMode.DEFAULT }
