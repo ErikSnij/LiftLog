@@ -482,6 +482,11 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Looks at every weight ever logged for this exercise and guesses a [WeightConfig] from the
+     *  pattern, or null if its history isn't consistent/plentiful enough to be confident. */
+    suspend fun guessWeightConfigFor(exerciseId: Long): WeightConfig? =
+        guessWeightConfig(dao.weightHistoryForExercise(exerciseId))
+
     fun promptMoveExercise(exerciseId: Long) {
         showDialog(RowDialog.MoveExercise(exerciseId))
     }

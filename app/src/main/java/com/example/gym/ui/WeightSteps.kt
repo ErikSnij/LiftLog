@@ -3,6 +3,7 @@ package com.example.gym.ui
 import com.example.gym.data.WeightConfig
 import com.example.gym.data.WeightMode
 import com.example.gym.data.WeightRoundMode
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -78,4 +79,64 @@ internal fun poundsToKg(lbs: Float, round: WeightRoundMode, precisionKg: Double 
         WeightRoundMode.NEAREST -> units.roundToInt().toDouble()
     }
     return (roundedUnits * precisionKg).toFloat()
+}
+
+/** A plate/pin size worth checking a detected kg step against, in pounds. */
+private val PLAUSIBLE_LB_STEPS = listOf(2.5f, 5f, 7.5f, 10f, 15f, 20f, 25f, 35f, 45f)
+
+/**
+ * Best-effort guess at a [WeightConfig] for an exercise, from every weight ever logged against
+ * it — null when the history isn't consistent/plentiful enough to be confident about anything.
+ *
+ * The idea: if every distinct weight this exercise has ever been logged at lines up with
+ * `base + n * step` for some small, consistent step, that step is very likely the equipment's
+ * real increment (a machine's pin spacing, a specific plate size) rather than coincidence. If
+ * that step is already a clean multiple of the app's default 0.5kg grid there's nothing to
+ * suggest; if it lands close to a standard pounds plate size converted to kg (e.g. 5lb ≈
+ * 2.27kg) a POUNDS config reproduces it exactly, otherwise a plain STEP config captures it.
+ */
+internal fun guessWeightConfig(historyKg: List<Float>): WeightConfig? {
+    val distinct = historyKg.map { (it * 100f).roundToInt() / 100f }.distinct().sorted()
+    if (distinct.size < 2) return null // one data point can't confirm a repeating interval
+
+    val base = distinct.first()
+    var step = distinct[1] - base
+    for (v in distinct.drop(2)) step = approxGcd(step, v - base)
+
+    // Equipment increments worth configuring are small and deliberate — anything this fine is
+    // probably measurement noise, anything this coarse is probably just a heavier working set,
+    // not a fixed step.
+    if (step < 0.2f || step > 5f) return null
+    // Already lands on the app's default 0.5kg wheel — nothing to suggest.
+    if (isCloseToMultiple(step, 0.5f, tolerance = 0.05f)) return null
+    // Every logged weight must actually land on the grid this step implies, or it isn't a real
+    // pattern — it's a coincidence between whichever two values happened to produce it.
+    if (distinct.any { !isCloseToMultiple(it - base, step, tolerance = 0.1f) }) return null
+
+    val bestLbStep = PLAUSIBLE_LB_STEPS.minByOrNull { abs(it * KG_PER_LB - step) }
+    return if (bestLbStep != null && abs(bestLbStep * KG_PER_LB - step) < bestLbStep * KG_PER_LB * 0.08f) {
+        // Reproduces `base` exactly under round-up: the largest lbs value whose rounded-up
+        // conversion doesn't exceed it.
+        val startLbs = floor((base / KG_PER_LB) * 10.0).toFloat() / 10f
+        WeightConfig(mode = WeightMode.POUNDS, startLbs = startLbs, stepLbs = bestLbStep, roundMode = WeightRoundMode.UP)
+    } else {
+        WeightConfig(mode = WeightMode.STEP, stepKg = (step * 10f).roundToInt() / 10f)
+    }
+}
+
+/** Euclidean GCD adapted for floats: stops once the remainder is within [tolerance] of zero. */
+private fun approxGcd(a: Float, b: Float, tolerance: Float = 0.05f): Float {
+    var x = abs(a)
+    var y = abs(b)
+    while (y > tolerance) {
+        val r = x % y
+        x = y
+        y = r
+    }
+    return x
+}
+
+private fun isCloseToMultiple(value: Float, unit: Float, tolerance: Float): Boolean {
+    val n = (value / unit).roundToInt()
+    return abs(value - n * unit) <= tolerance
 }
