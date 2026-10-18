@@ -11,6 +11,7 @@ import com.example.gym.LiftLogApp
 import com.example.gym.data.Flag
 import com.example.gym.data.LiftLogDao
 import com.example.gym.data.WeightConfig
+import com.example.gym.data.WeightMode
 import com.example.gym.data.weightConfig
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -344,7 +345,51 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                 enqueueSync(today)
                 undoRequest = UndoRequest("Logged today") { dao.deleteLogEntry(id); enqueueSync(today) }
             }
+            if (state.weight != null) suggestWeightIncrementsIfDefault(state.setRowId)
         }
+    }
+
+    /** A detected weight-increment pattern offered via snackbar; applied only if the user taps it. */
+    class WeightSuggestion(val exerciseId: Long, val message: String, val config: WeightConfig)
+
+    var weightSuggestion by mutableStateOf<WeightSuggestion?>(null)
+        private set
+
+    // Each exercise is offered at most once per session, whether accepted or ignored, so a
+    // declined suggestion doesn't come back on every log.
+    private val suggestedExerciseIds = mutableSetOf<Long>()
+
+    /**
+     * Runs after each log: for an exercise still on the default wheel, checks its weight history for
+     * a consistent equipment increment. Cheap by design — a primary-key lookup first, and the history
+     * scan only for default-mode exercises not already offered this session.
+     */
+    private suspend fun suggestWeightIncrementsIfDefault(setRowId: Long) {
+        val exerciseId = dao.exerciseIdOf(setRowId) ?: return
+        if (exerciseId in suggestedExerciseIds) return
+        val exercise = dao.getExercise(exerciseId) ?: return
+        if (exercise.weightMode != WeightMode.DEFAULT) return
+        val config = guessWeightConfig(dao.weightHistoryForExercise(exerciseId)) ?: return
+        suggestedExerciseIds += exerciseId
+        val step = when (config.mode) {
+            WeightMode.POUNDS -> config.stepLbs?.let { "${trimFloat(it)} lb" }
+            else -> config.stepKg?.let { "${trimFloat(it)} kg" }
+        } ?: return
+        weightSuggestion = WeightSuggestion(
+            exerciseId = exerciseId,
+            message = "${exercise.name} looks like $step steps",
+            config = config,
+        )
+    }
+
+    fun applyWeightSuggestion() {
+        val s = weightSuggestion ?: return
+        weightSuggestion = null
+        saveWeightIncrements(s.exerciseId, s.config)
+    }
+
+    fun clearWeightSuggestion() {
+        weightSuggestion = null
     }
 
     /** Queues [date]'s session for TrainHub upload and nudges the sync worker to try right away. */
@@ -699,6 +744,7 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
     fun performUndo() {
         val req = undoRequest ?: return
         undoRequest = null
+        weightSuggestion = null // may have been derived from the log being undone
         viewModelScope.launch { req.perform() }
     }
 

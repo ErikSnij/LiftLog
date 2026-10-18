@@ -229,6 +229,18 @@ fun TreeScreen(
         if (result == SnackbarResult.ActionPerformed) vm.performUndo() else vm.clearUndo()
     }
 
+    // Queues behind the "Logged today" Undo snackbar (SnackbarHostState shows them one at a time).
+    val suggestion = vm.weightSuggestion
+    LaunchedEffect(suggestion) {
+        if (suggestion == null) return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = suggestion.message,
+            actionLabel = "Apply",
+            duration = SnackbarDuration.Long,
+        )
+        if (result == SnackbarResult.ActionPerformed) vm.applyWeightSuggestion() else vm.clearWeightSuggestion()
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
