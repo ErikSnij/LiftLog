@@ -65,6 +65,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
@@ -244,7 +245,9 @@ fun TreeScreen(
                 )
                 HorizontalDivider()
 
-                Box(modifier = Modifier.weight(1f)) {
+                // Clipped so a sticky bar being pushed up past the top edge disappears there
+                // instead of drawing over the top bar.
+                Box(modifier = Modifier.weight(1f).clipToBounds()) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
