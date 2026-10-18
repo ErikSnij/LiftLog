@@ -3,13 +3,6 @@ package com.example.gym.ui
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -31,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -82,11 +76,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -99,6 +92,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -161,48 +155,29 @@ fun TreeScreen(
     val pinnedIdsMap = remember(tree, vm.collapsedMuscleGroups, vm.collapsedAreas, showArchived) {
         buildPinnedIdsMap(tree, vm.collapsedMuscleGroups, vm.collapsedAreas, showArchived)
     }
-    // No size filter this time — real headers always keep their natural height (just invisible
-    // when pinned), so visibleItemsInfo never gets distorted by a zero-height item and this
-    // stays in sync every frame, not just after an extra scroll nudge.
-    val pinnedIds by remember(pinnedIdsMap) {
-        derivedStateOf { pinnedIdsMap[listState.layoutInfo.visibleItemsInfo.firstOrNull()?.key as? String] }
-    }
-    val pinnedCategory = pinnedIds?.let { ids -> tree.categories.find { it.id == ids.categoryId } }
-    val pinnedGroup = pinnedIds?.muscleGroupId?.let { mgId ->
-        pinnedCategory?.muscleGroups?.find { it.id == mgId }
-    }
-    val pinnedArea = pinnedIds?.areaId?.let { aId -> pinnedGroup?.areas?.find { it.id == aId } }
-    val density = LocalDensity.current
-    // Stable heights measured from the real (non-animated) headers in the list — NOT from the
-    // animated overlay below. Using the overlay's own live size caused the list's top padding to
-    // fluctuate every frame during a slide/fade transition, visibly dragging the whole list up
-    // and down in sync with the animation.
+    // Heights of each header level, measured from the real rows and the pinned bars (they're the
+    // same composables, so the same size). Feed the sticky-stack math in computePinnedStack.
     var catHeightPx by remember { mutableIntStateOf(0) }
     var groupHeightPx by remember { mutableIntStateOf(0) }
     var areaHeightPx by remember { mutableIntStateOf(0) }
-    // Ramps from 0 up to the full 3-level reservation in lockstep with actual scroll distance
-    // from the very top of the list (item 0 = category header, item 1 = its first muscle group,
-    // item 2 = its first muscle — exactly the 3 levels this padding reserves space for). Because
-    // the padding grows by exactly the same number of pixels the list scrolls by, the padding
-    // change and the scroll cancel out with zero net movement on screen — unlike a discrete jump
-    // to a fixed padding value, there's nothing to visibly compensate for. Past item 2 (i.e. once
-    // you've scrolled at least past all 3 header levels) it's pinned at the full constant, which
-    // is what avoids the flash/jump a naive always-conditional padding had (see git history).
-    // This fixes the big blank gap that appeared when scrolled all the way to the top, where the
-    // full 3-level height used to be reserved even though nothing was actually pinned there yet.
-    val overlayHeightPx by remember {
+    val pinned by remember(pinnedIdsMap) {
         derivedStateOf {
-            val reserved = catHeightPx + groupHeightPx + areaHeightPx
-            val scrolledPastTopPx = when (listState.firstVisibleItemIndex) {
-                0 -> listState.firstVisibleItemScrollOffset
-                1 -> catHeightPx + listState.firstVisibleItemScrollOffset
-                2 -> catHeightPx + groupHeightPx + listState.firstVisibleItemScrollOffset
-                else -> reserved
-            }
-            scrolledPastTopPx.coerceAtMost(reserved)
+            computePinnedStack(
+                items = listState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
+                    (info.key as? String)?.let { VisibleItem(it, info.offset) }
+                },
+                idsOf = { key -> pinnedIdsMap[key] },
+                catH = catHeightPx,
+                groupH = groupHeightPx,
+                areaH = areaHeightPx,
+            )
         }
     }
-
+    val pinnedCategory = pinned?.let { p -> tree.categories.find { it.id == p.categoryId } }
+    val pinnedGroup = pinned?.muscleGroupId?.let { mgId ->
+        pinnedCategory?.muscleGroups?.find { it.id == mgId }
+    }
+    val pinnedArea = pinned?.areaId?.let { aId -> pinnedGroup?.areas?.find { it.id == aId } }
 
     // Scrolling the page dismisses a pending edit — so an accidental tap on a value/date is
     // easily shrugged off by just scrolling on. Keyed on an actual touch-drag (not plain
@@ -270,10 +245,9 @@ fun TreeScreen(
                 HorizontalDivider()
 
                 Box(modifier = Modifier.weight(1f)) {
-                val overlayHeightDp = with(density) { overlayHeightPx.toDp() }
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize().padding(top = overlayHeightDp),
+                    modifier = Modifier.fillMaxSize(),
                     // Extra bottom space so the last row can be scrolled up away from the very
                     // bottom edge — otherwise there's nowhere comfortable to see/reach its inline
                     // wheel editor once it opens.
@@ -281,14 +255,8 @@ fun TreeScreen(
                 ) {
                     for (category in tree.categories) {
                         item(key = categoryKey(category.id)) {
-                            // Invisible (not zero-height) whenever the overlay above is showing this
-                            // same category — keeping its real height means visibleItemsInfo never
-                            // gets distorted, so the overlay stays in sync every frame. Also reports
-                            // its natural height for the list's (non-animated) top padding.
                             CategoryHeader(
-                                modifier = Modifier
-                                    .onGloballyPositioned { catHeightPx = it.size.height }
-                                    .alpha(if (pinnedCategory?.id == category.id) 0f else 1f),
+                                modifier = Modifier.onGloballyPositioned { catHeightPx = it.size.height },
                                 name = category.name,
                                 onAddMuscleGroup = { vm.promptAddMuscleGroup(category.id) },
                                 menuExpanded = vm.menuForCategory == category.id,
@@ -306,9 +274,7 @@ fun TreeScreen(
                             val groupCollapsed = group.id in vm.collapsedMuscleGroups
                             item(key = muscleGroupKey(group.id)) {
                                 MuscleGroupHeader(
-                                    modifier = Modifier
-                                        .onGloballyPositioned { groupHeightPx = it.size.height }
-                                        .alpha(if (pinnedGroup?.id == group.id) 0f else 1f),
+                                    modifier = Modifier.onGloballyPositioned { groupHeightPx = it.size.height },
                                     name = group.name,
                                     date = group.lastPerformed,
                                     collapsed = groupCollapsed,
@@ -331,9 +297,7 @@ fun TreeScreen(
                             val areaCollapsed = area.id in vm.collapsedAreas
                             item(key = areaKey(area.id)) {
                                 AreaHeader(
-                                    modifier = Modifier
-                                        .onGloballyPositioned { areaHeightPx = it.size.height }
-                                        .alpha(if (pinnedArea?.id == area.id) 0f else 1f),
+                                    modifier = Modifier.onGloballyPositioned { areaHeightPx = it.size.height },
                                     name = area.name,
                                     date = area.lastPerformed,
                                     collapsed = areaCollapsed,
@@ -420,102 +384,84 @@ fun TreeScreen(
                     }
                 }
 
-                // Pinned breadcrumb: shows the category/muscle-group/muscle owning whatever is
-                // currently topmost in the list. The LazyColumn above is padded by overlayHeightPx
-                // (stable per-level heights, computed above — deliberately NOT this Column's own
-                // live/animated size, which fluctuates during a transition and would otherwise drag
-                // the whole list up and down in sync with the animation).
-                // Each level animates its own handoff (slide + fade) via AnimatedContent instead
-                // of an instant swap — native LazyColumn stickyHeader can't stack 3 independent
-                // levels with scroll-synced push physics (confirmed: a second stickyHeader just
-                // evicts the first), and hand-rolling exact pixel-synced push against internal
-                // LazyList offset semantics proved too fragile to ship reliably. This trades exact
-                // scroll-speed sync for a well-tested, low-risk animation primitive.
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .fillMaxWidth(),
-                ) {
-                    AnimatedContent(
-                        targetState = pinnedCategory?.id,
-                        transitionSpec = {
-                            (slideInVertically(tween(220)) { h -> h } + fadeIn(tween(220))) togetherWith
-                                (slideOutVertically(tween(180)) { h -> -h } + fadeOut(tween(180)))
-                        },
-                        label = "pinnedCategory",
-                    ) { id ->
-                        val cat = id?.let { catId -> tree.categories.find { it.id == catId } }
-                        if (cat != null) {
-                            CategoryHeader(
-                                name = cat.name,
-                                onAddMuscleGroup = { vm.promptAddMuscleGroup(cat.id) },
-                                menuExpanded = vm.menuForCategory == cat.id,
-                                onLongPress = { vm.openCategoryMenu(cat.id) },
-                                onDismissMenu = vm::closeCategoryMenu,
-                                onRename = {
-                                    vm.showDialog(TreeViewModel.RowDialog.RenameCategory(cat.id, cat.name))
-                                },
-                                onDelete = { vm.deleteCategory(cat.id) },
-                                onMoveUp = { vm.moveCategory(cat.id, -1) },
-                                onMoveDown = { vm.moveCategory(cat.id, 1) },
-                            )
+                // Sticky header stack, drawn over the list at the positions computePinnedStack
+                // gives (stacked under each other, pushed up by the next section as it arrives).
+                // The real header rows stay in the list and scroll beneath these opaque bars.
+                // Full-size so every bar stays inside this Box's bounds and can be tapped.
+                val p = pinned
+                if (p != null) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // Lowest level first so higher levels draw over (and hide) a bar being
+                        // pushed up underneath them.
+                        if (pinnedArea != null) {
+                            Box(
+                                Modifier
+                                    .offset { IntOffset(0, p.areaY) }
+                                    .onSizeChanged { areaHeightPx = it.height },
+                            ) {
+                                AreaHeader(
+                                    name = pinnedArea.name,
+                                    date = pinnedArea.lastPerformed,
+                                    collapsed = pinnedArea.id in vm.collapsedAreas,
+                                    onToggle = { vm.toggleArea(pinnedArea.id) },
+                                    onAddExercise = { vm.promptAddExercise(pinnedArea.id) },
+                                    menuExpanded = vm.menuForArea == pinnedArea.id,
+                                    onLongPress = { vm.openAreaMenu(pinnedArea.id) },
+                                    onDismissMenu = vm::closeAreaMenu,
+                                    onRename = {
+                                        vm.showDialog(TreeViewModel.RowDialog.RenameArea(pinnedArea.id, pinnedArea.name))
+                                    },
+                                    onDelete = { vm.deleteArea(pinnedArea.id) },
+                                    onMoveUp = { vm.moveArea(pinnedArea.id, -1) },
+                                    onMoveDown = { vm.moveArea(pinnedArea.id, 1) },
+                                )
+                            }
                         }
-                    }
-                    AnimatedContent(
-                        targetState = pinnedGroup?.id,
-                        transitionSpec = {
-                            (slideInVertically(tween(220)) { h -> h } + fadeIn(tween(220))) togetherWith
-                                (slideOutVertically(tween(180)) { h -> -h } + fadeOut(tween(180)))
-                        },
-                        label = "pinnedGroup",
-                    ) { id ->
-                        val group = id?.let { gId -> pinnedCategory?.muscleGroups?.find { it.id == gId } }
-                        if (group != null) {
-                            MuscleGroupHeader(
-                                name = group.name,
-                                date = group.lastPerformed,
-                                collapsed = group.id in vm.collapsedMuscleGroups,
-                                onToggle = { vm.toggleMuscleGroup(group.id) },
-                                onAddArea = { vm.promptAddArea(group.id) },
-                                menuExpanded = vm.menuForMuscleGroup == group.id,
-                                onLongPress = { vm.openMuscleGroupMenu(group.id) },
-                                onDismissMenu = vm::closeMuscleGroupMenu,
-                                onRename = {
-                                    vm.showDialog(TreeViewModel.RowDialog.RenameMuscleGroup(group.id, group.name))
-                                },
-                                onDelete = { vm.deleteMuscleGroup(group.id) },
-                                onMoveUp = { vm.moveMuscleGroup(group.id, -1) },
-                                onMoveDown = { vm.moveMuscleGroup(group.id, 1) },
-                                onCollapseAllAreas = { vm.collapseAllAreasInGroup(group.id) },
-                            )
+                        if (pinnedGroup != null) {
+                            Box(
+                                Modifier
+                                    .offset { IntOffset(0, p.groupY) }
+                                    .onSizeChanged { groupHeightPx = it.height },
+                            ) {
+                                MuscleGroupHeader(
+                                    name = pinnedGroup.name,
+                                    date = pinnedGroup.lastPerformed,
+                                    collapsed = pinnedGroup.id in vm.collapsedMuscleGroups,
+                                    onToggle = { vm.toggleMuscleGroup(pinnedGroup.id) },
+                                    onAddArea = { vm.promptAddArea(pinnedGroup.id) },
+                                    menuExpanded = vm.menuForMuscleGroup == pinnedGroup.id,
+                                    onLongPress = { vm.openMuscleGroupMenu(pinnedGroup.id) },
+                                    onDismissMenu = vm::closeMuscleGroupMenu,
+                                    onRename = {
+                                        vm.showDialog(TreeViewModel.RowDialog.RenameMuscleGroup(pinnedGroup.id, pinnedGroup.name))
+                                    },
+                                    onDelete = { vm.deleteMuscleGroup(pinnedGroup.id) },
+                                    onMoveUp = { vm.moveMuscleGroup(pinnedGroup.id, -1) },
+                                    onMoveDown = { vm.moveMuscleGroup(pinnedGroup.id, 1) },
+                                    onCollapseAllAreas = { vm.collapseAllAreasInGroup(pinnedGroup.id) },
+                                )
+                            }
                         }
-                    }
-                    AnimatedContent(
-                        targetState = pinnedArea?.id,
-                        transitionSpec = {
-                            (slideInVertically(tween(220)) { h -> h } + fadeIn(tween(220))) togetherWith
-                                (slideOutVertically(tween(180)) { h -> -h } + fadeOut(tween(180)))
-                        },
-                        label = "pinnedArea",
-                    ) { id ->
-                        val area = id?.let { aId -> pinnedGroup?.areas?.find { it.id == aId } }
-                        if (area != null) {
-                            AreaHeader(
-                                name = area.name,
-                                date = area.lastPerformed,
-                                collapsed = area.id in vm.collapsedAreas,
-                                onToggle = { vm.toggleArea(area.id) },
-                                onAddExercise = { vm.promptAddExercise(area.id) },
-                                menuExpanded = vm.menuForArea == area.id,
-                                onLongPress = { vm.openAreaMenu(area.id) },
-                                onDismissMenu = vm::closeAreaMenu,
-                                onRename = {
-                                    vm.showDialog(TreeViewModel.RowDialog.RenameArea(area.id, area.name))
-                                },
-                                onDelete = { vm.deleteArea(area.id) },
-                                onMoveUp = { vm.moveArea(area.id, -1) },
-                                onMoveDown = { vm.moveArea(area.id, 1) },
-                            )
+                        if (pinnedCategory != null) {
+                            Box(
+                                Modifier
+                                    .offset { IntOffset(0, p.categoryY) }
+                                    .onSizeChanged { catHeightPx = it.height },
+                            ) {
+                                CategoryHeader(
+                                    name = pinnedCategory.name,
+                                    onAddMuscleGroup = { vm.promptAddMuscleGroup(pinnedCategory.id) },
+                                    menuExpanded = vm.menuForCategory == pinnedCategory.id,
+                                    onLongPress = { vm.openCategoryMenu(pinnedCategory.id) },
+                                    onDismissMenu = vm::closeCategoryMenu,
+                                    onRename = {
+                                        vm.showDialog(TreeViewModel.RowDialog.RenameCategory(pinnedCategory.id, pinnedCategory.name))
+                                    },
+                                    onDelete = { vm.deleteCategory(pinnedCategory.id) },
+                                    onMoveUp = { vm.moveCategory(pinnedCategory.id, -1) },
+                                    onMoveDown = { vm.moveCategory(pinnedCategory.id, 1) },
+                                )
+                            }
                         }
                     }
                 }
@@ -613,14 +559,10 @@ fun TreeScreen(
     }
 }
 
-/** Which category/muscle-group/muscle the topmost visible list item belongs to. */
-private data class PinnedIds(val categoryId: Long, val muscleGroupId: Long?, val areaId: Long?)
-
 /**
  * Maps every item key emitted into the LazyColumn to its owning category/muscle-group/muscle,
  * mirroring the exact skip logic (collapsed groups/areas, archived filter) used to build the
- * list itself. Drives the pinned breadcrumb overlay: whichever category/group/muscle the
- * topmost visible item belongs to is what the overlay shows.
+ * list itself. Drives the sticky header stack (see computePinnedStack).
  */
 private fun buildPinnedIdsMap(
     tree: TreeUi,
