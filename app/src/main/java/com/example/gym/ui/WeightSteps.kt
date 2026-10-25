@@ -6,6 +6,7 @@ import com.example.gym.data.WeightRoundMode
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 private const val KG_PER_LB = 0.45359237f
@@ -89,16 +90,91 @@ private val PLAUSIBLE_LB_STEPS = listOf(2.5f, 5f, 7.5f, 10f, 15f, 20f, 25f, 35f,
  * it — null when the history isn't consistent/plentiful enough to be confident about anything.
  *
  * The idea: if every distinct weight this exercise has ever been logged at lines up with
- * `base + n * step` for some small, consistent step, that step is very likely the equipment's
- * real increment (a machine's pin spacing, a specific plate size) rather than coincidence. If
- * that step is already a clean multiple of the app's default 0.5kg grid there's nothing to
- * suggest; if it lands close to a standard pounds plate size converted to kg (e.g. 5lb ≈
- * 2.27kg) a POUNDS config reproduces it exactly, otherwise a plain STEP config captures it.
+ * `base + n * step` for some consistent step, that step is very likely the equipment's real
+ * increment (a machine's pin spacing, a specific plate size) rather than coincidence. Weights on
+ * a clean kg grid (5kg jumps, 2kg dumbbells) need no suggestion. Otherwise two detectors run in
+ * order: [guessFromPoundSteps] (tests standard lb pin sizes directly, tolerant of whole-kg
+ * rounding — how lb machines usually get logged) and [guessFromGcd] (derives an arbitrary small
+ * step from the weights' differences, for precisely-logged data).
  */
 internal fun guessWeightConfig(historyKg: List<Float>): WeightConfig? {
     val distinct = historyKg.map { (it * 100f).roundToInt() / 100f }.distinct().sorted()
     if (distinct.size < 2) return null // one data point can't confirm a repeating interval
 
+    // Weights already on a clean kg grid (5kg plate jumps, 2kg dumbbells, ...) are served fine by
+    // the default wheel — and must not be mistaken for a pounds stack below.
+    val base = distinct.first()
+    if (NATURAL_KG_STEPS.any { k -> distinct.all { isCloseToMultiple(it - base, k, tolerance = 0.05f) } }) return null
+
+    guessFromPoundSteps(distinct)?.let { return it }
+    return guessFromGcd(distinct)
+}
+
+/** Pin/plate sizes in lb worth testing as a candidate step, coarsest first. */
+private val POUND_STEP_CANDIDATES = listOf(25f, 20f, 15f, 10f, 7.5f, 5f, 2.5f)
+
+/** Step sizes people choose in kg on purpose (plate jumps, dumbbell pairs) — not a pounds stack. */
+private val NATURAL_KG_STEPS = listOf(2f, 2.5f, 5f, 10f, 20f, 25f)
+
+/** Max chance that the logged weights would line up with a candidate step purely by accident. */
+private const val MAX_FALSE_FIT_ODDS = 0.15
+
+/**
+ * Tests each plausible lb step directly against the logged weights instead of deriving a step
+ * from their differences. A machine labelled in lb but logged in whole kg ("93, 100, 107, 113"
+ * for 205/220/235/250 lb) has every weight rounded by up to 0.5kg, which makes a difference-based
+ * GCD collapse to ~1kg; checking "do these all sit on a 15 lb grid, give or take rounding?" doesn't.
+ *
+ * A step fits when the weights' offsets within it (modulo the step) bunch into a window no wider
+ * than the rounding error. Coarse steps are tried first, and a fit only counts if it would be an
+ * unlikely coincidence for this many weights (few weights vs. a fine step prove nothing).
+ */
+private fun guessFromPoundSteps(distinct: List<Float>): WeightConfig? {
+    val base = distinct.first()
+    val wholeKg = distinct.all { isCloseToMultiple(it, 1f, tolerance = 0.01f) }
+    // Whole-kg logs are a lb value rounded to the nearest kg (each up to 0.5kg off, so offsets can
+    // span 1kg); logs from this app's own pounds wheel are rounded up to 0.1kg.
+    val window = if (wholeKg) 1.001 else 0.12
+
+    for (lbs in POUND_STEP_CANDIDATES) {
+        val stepKg = lbs.toDouble() * KG_PER_LB
+        if (offsetSpread(distinct, stepKg) > window) continue
+        val oddsOfCoincidence = (window / stepKg).coerceAtMost(1.0).pow(distinct.size - 1)
+        if (oddsOfCoincidence > MAX_FALSE_FIT_ODDS) continue
+
+        // Whole-kg data: snap to a plain 2.5 lb mark (stacks are numbered that way). Wheel-made
+        // data: reproduce the lowest weight exactly under round-up.
+        val startLbs = if (wholeKg) {
+            (floor(base / KG_PER_LB / 2.5f + 0.5f) * 2.5f)
+        } else {
+            floor((base / KG_PER_LB) * 10.0).toFloat() / 10f
+        }
+        val config = WeightConfig(
+            mode = WeightMode.POUNDS,
+            startLbs = startLbs,
+            stepLbs = lbs,
+            roundMode = WeightRoundMode.UP,
+        )
+        if (wheelCovers(config, distinct, toleranceKg = if (wholeKg) 0.55f else 0.12f)) return config
+    }
+    return null
+}
+
+/** Width of the smallest arc of [0, step) that contains every weight's offset within a step. */
+private fun offsetSpread(weights: List<Float>, stepKg: Double): Double {
+    val offsets = weights.map { ((it % stepKg) + stepKg) % stepKg }.sorted()
+    var widestGap = offsets.first() + stepKg - offsets.last() // the gap that wraps around
+    for (i in 1 until offsets.size) widestGap = maxOf(widestGap, offsets[i] - offsets[i - 1])
+    return stepKg - widestGap
+}
+
+/** True if every logged weight is within [toleranceKg] of some value on [config]'s wheel. */
+private fun wheelCovers(config: WeightConfig, weights: List<Float>, toleranceKg: Float): Boolean {
+    val wheel = weightWheelValues(config).filterNotNull()
+    return weights.all { w -> wheel.any { abs(it - w) <= toleranceKg } }
+}
+
+private fun guessFromGcd(distinct: List<Float>): WeightConfig? {
     val base = distinct.first()
     var step = distinct[1] - base
     for (v in distinct.drop(2)) step = approxGcd(step, v - base)
