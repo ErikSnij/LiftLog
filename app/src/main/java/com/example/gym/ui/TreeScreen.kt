@@ -141,6 +141,23 @@ fun TreeScreen(
         }
     }
 
+    val saveJson = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val jsonText = Exporter.export(app.database)
+                        context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(jsonText) }
+                            ?: error("Could not open file for writing")
+                    }.isSuccess
+                }
+                snackbarHostState.showSnackbar(if (saved) "Saved to Files" else "Couldn't save the file")
+            }
+        }
+    }
+
     val importResult = vm.importResult
     LaunchedEffect(importResult) {
         if (importResult == null) return@LaunchedEffect
@@ -237,6 +254,7 @@ fun TreeScreen(
                     showArchived = showArchived,
                     onToggleArchived = vm::updateShowArchived,
                     onExport = { scope.launch { shareExport(context, app) } },
+                    onSaveToFiles = { saveJson.launch("liftlog-export-${LocalDate.now()}.json") },
                     onImport = { pickJson.launch(arrayOf("application/json", "text/plain")) },
                     onAddCategory = vm::promptAddCategory,
                     onBodyWeight = onOpenBodyWeight,
@@ -1751,6 +1769,7 @@ private fun TopBar(
     showArchived: Boolean,
     onToggleArchived: (Boolean) -> Unit,
     onExport: () -> Unit,
+    onSaveToFiles: () -> Unit,
     onImport: () -> Unit,
     onAddCategory: () -> Unit,
     onBodyWeight: () -> Unit,
@@ -1798,6 +1817,7 @@ private fun TopBar(
                 showArchived = showArchived,
                 onDismiss = { menuOpen = false },
                 onExport = { menuOpen = false; onExport() },
+                onSaveToFiles = { menuOpen = false; onSaveToFiles() },
                 onImport = { menuOpen = false; onImport() },
                 onToggleArchived = onToggleArchived,
                 onOpenSettings = { menuOpen = false; onOpenSettings() },
@@ -1854,6 +1874,7 @@ private fun AppMenu(
     showArchived: Boolean,
     onDismiss: () -> Unit,
     onExport: () -> Unit,
+    onSaveToFiles: () -> Unit,
     onImport: () -> Unit,
     onToggleArchived: (Boolean) -> Unit,
     onOpenSettings: () -> Unit,
@@ -1890,6 +1911,26 @@ private fun AppMenu(
                 Text("Export data", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Text(
                     "Share your log as JSON",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(onClick = onSaveToFiles)
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconChip { ExportGlyph(it) }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Save to Files", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    "Download your log as a JSON file",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
