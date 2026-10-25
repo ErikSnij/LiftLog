@@ -281,7 +281,10 @@ private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeig
         val maxV = points.maxOf { it.value }
         val mean = (minV + maxV) / 2f
         val halfRange = maxOf(mean * 0.30f, (maxV - minV) / 2f * 1.15f).coerceAtLeast(1f)
-        val yLo = (mean - halfRange).coerceAtLeast(0f)
+        // Weight/1RM data is never negative, so floor the axis at 0 for a clean look. Reps @ Max
+        // can legitimately go negative (a set below the all-time max) — only floor it at 0 when
+        // the data itself never dips below 0, so a real negative point is never clipped off-canvas.
+        val yLo = (mean - halfRange).let { if (minV >= 0f) it.coerceAtLeast(0f) else it }
         val yHi = mean + halfRange
 
         val hPad = with(density) { 12.dp.toPx() }

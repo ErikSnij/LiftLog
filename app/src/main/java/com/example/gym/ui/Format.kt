@@ -47,14 +47,15 @@ internal fun round1(value: Float): String = trimFloat(Math.round(value * 10f) / 
  * Anchoring to the heaviest weight ever lifted turns performance at any weight into a single
  * comparable rep count, so progress reads as a trend even as the working weight changes.
  *
- * A set weaker than the target weight for even a single rep would formally invert to a negative
- * rep count, which reads as a chart glitch rather than "this was a light day". Below that point
- * (e1RM < targetWeight) this instead returns e1RM/targetWeight — a small positive fraction that
- * still shrinks the weaker the set was — trading the rep scale's accuracy below 1 for a plot
- * that never dips below zero.
+ * One continuous formula across the whole range: 0 means "this set's e1RM exactly matches your
+ * all-time max", positive means it exceeded it, negative means it fell short. Used to special-case
+ * the below-max side to a small positive fraction instead, to avoid negative numbers — but that
+ * made the two sides disagree at the seam (ratio == 1f): a set at or barely above the max scored
+ * near 0, while a set further below it could score higher just for landing on the other branch.
+ * Staying on one formula keeps it monotonic with actual strength; the chart handles negative
+ * values on its own axis instead.
  */
 internal fun repsAtWeight(e1RM: Float, targetWeight: Float): Float? {
     if (targetWeight <= 0f) return null
-    val ratio = e1RM / targetWeight
-    return if (ratio >= 1f) 30f * (ratio - 1f) else ratio
+    return 30f * (e1RM / targetWeight - 1f)
 }
