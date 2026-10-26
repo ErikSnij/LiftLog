@@ -165,23 +165,32 @@ private fun guessFromPoundSteps(distinct: List<Float>): WeightConfig? {
         // Whole-kg data: snap to a plain 2.5 lb mark (stacks are numbered that way) and round the
         // wheel to whole kg like the plate labels. Wheel-made data: reproduce the lowest weight
         // exactly under round-up.
-        // The wheel starts at the lowest weight actually logged: the lighter pins below it are
-        // never used, so they shouldn't be on the wheel.
-        val startLbs = if (wholeKg) {
+        val anchorLbs = if (wholeKg) {
             (floor(base / KG_PER_LB / 2.5f + 0.5f) * 2.5f)
         } else {
             floor((base / KG_PER_LB) * 10.0).toFloat() / 10f
         }
-        val config = WeightConfig(
-            mode = WeightMode.POUNDS,
-            startLbs = startLbs,
-            stepLbs = lbs,
-            roundMode = if (wholeKg) WeightRoundMode.WHOLE_KG else WeightRoundMode.UP,
-        )
-        // WHOLE_KG lands exactly on printed labels, so it has to match the logged weights exactly.
-        if (wheelCovers(config, distinct, toleranceKg = if (wholeKg) 0.05f else 0.12f)) return config
+        val roundMode = if (wholeKg) WeightRoundMode.WHOLE_KG else WeightRoundMode.UP
+        // Prefer starting at the stack's first pin (the step-aligned weight below everything logged)
+        // so lighter pins stay selectable, rather than at the lowest weight ever logged.
+        for (startLbs in listOf(stackBottomLbs(anchorLbs, lbs), anchorLbs).distinct()) {
+            val config = WeightConfig(
+                mode = WeightMode.POUNDS,
+                startLbs = startLbs,
+                stepLbs = lbs,
+                roundMode = roundMode,
+            )
+            // WHOLE_KG lands exactly on printed labels, so it has to match the logged weights exactly.
+            if (wheelCovers(config, distinct, toleranceKg = if (wholeKg) 0.05f else 0.12f)) return config
+        }
     }
     return null
+}
+
+/** Lowest step-aligned weight (in lb, at least 1) that [anchorLbs] sits on, to 0.1 lb. */
+private fun stackBottomLbs(anchorLbs: Float, stepLbs: Float): Float {
+    val remainder = ((anchorLbs % stepLbs) * 10f).roundToInt() / 10f
+    return if (remainder < 1f) remainder + stepLbs else remainder
 }
 
 /** Width of the smallest arc of [0, step) that contains every weight's offset within a step. */
