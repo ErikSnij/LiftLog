@@ -10,6 +10,8 @@ import com.example.gym.data.LiftLogDatabase
 import com.example.gym.data.LogEntryEntity
 import com.example.gym.data.MuscleGroupEntity
 import com.example.gym.data.SetRowEntity
+import com.example.gym.data.WeightMode
+import com.example.gym.data.WeightRoundMode
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
 
@@ -42,8 +44,22 @@ object Importer {
                                 AreaEntity(muscleGroupId = mgId, name = area.name, sortOrder = aIdx)
                             )
                             for (ex in area.exercises) {
+                                val wc = ex.weightConfig
                                 val exId = dao.insertExercise(
-                                    ExerciseEntity(areaId = areaId, name = ex.name, archived = ex.archived)
+                                    ExerciseEntity(
+                                        areaId = areaId,
+                                        name = ex.name,
+                                        archived = ex.archived,
+                                        weightMode = wc?.let { runCatching { WeightMode.valueOf(it.mode) }.getOrNull() }
+                                            ?: WeightMode.DEFAULT,
+                                        weightStepKg = wc?.stepKg,
+                                        weightHeavyThresholdKg = wc?.heavyThresholdKg,
+                                        weightHeavyStepKg = wc?.heavyStepKg,
+                                        weightStartLbs = wc?.startLbs,
+                                        weightStepLbs = wc?.stepLbs,
+                                        weightRoundMode = wc?.let { runCatching { WeightRoundMode.valueOf(it.roundMode) }.getOrNull() }
+                                            ?: WeightRoundMode.UP,
+                                    )
                                 )
                                 for (sr in ex.setRows) {
                                     val srId = dao.insertSetRow(
