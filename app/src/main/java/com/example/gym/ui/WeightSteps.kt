@@ -92,22 +92,41 @@ private val PLAUSIBLE_LB_STEPS = listOf(2.5f, 5f, 7.5f, 10f, 15f, 20f, 25f, 35f,
  * The idea: if every distinct weight this exercise has ever been logged at lines up with
  * `base + n * step` for some consistent step, that step is very likely the equipment's real
  * increment (a machine's pin spacing, a specific plate size) rather than coincidence. Weights on
- * a clean kg grid (5kg jumps, 2kg dumbbells) need no suggestion. Otherwise two detectors run in
- * order: [guessFromPoundSteps] (tests standard lb pin sizes directly, tolerant of whole-kg
- * rounding — how lb machines usually get logged) and [guessFromGcd] (derives an arbitrary small
- * step from the weights' differences, for precisely-logged data).
+ * a clean kg grid (5kg jumps, 2kg dumbbells) get a plain kg step from [guessFromKgGrid].
+ * Otherwise two detectors run in order: [guessFromPoundSteps] (tests standard lb pin sizes
+ * directly, tolerant of whole-kg rounding — how lb machines usually get logged) and
+ * [guessFromGcd] (derives an arbitrary small step from the weights' differences, for
+ * precisely-logged data).
  */
 internal fun guessWeightConfig(historyKg: List<Float>): WeightConfig? {
     val distinct = historyKg.map { (it * 100f).roundToInt() / 100f }.distinct().sorted()
     if (distinct.size < 2) return null // one data point can't confirm a repeating interval
 
-    // Weights already on a clean kg grid (5kg plate jumps, 2kg dumbbells, ...) are served fine by
-    // the default wheel — and must not be mistaken for a pounds stack below.
+    // Weights on a clean kg grid (5kg plate jumps, 2kg dumbbells, ...) are a plate/dumbbell
+    // setup, not a pounds stack — settle it here so it isn't misread as one below.
     val base = distinct.first()
-    if (NATURAL_KG_STEPS.any { k -> distinct.all { isCloseToMultiple(it - base, k, tolerance = 0.05f) } }) return null
+    if (NATURAL_KG_STEPS.any { k -> distinct.all { isCloseToMultiple(it - base, k, tolerance = 0.05f) } }) {
+        return guessFromKgGrid(distinct)
+    }
 
     guessFromPoundSteps(distinct)?.let { return it }
     return guessFromGcd(distinct)
+}
+
+/** Largest first. Capped at 5kg: coarser jumps are rare as real equipment steps and would skip weights. */
+private val KG_GRID_STEPS = listOf(5f, 2.5f, 2f)
+
+/**
+ * The default wheel can already land on weights like 50/60/80, but scrolling 0.5kg at a time to get
+ * there is slow. If every logged weight is a whole multiple of 5kg (else 2.5, else 2) suggest that
+ * as the step. A step wheel counts up from 0, so the weights must be multiples of the step itself
+ * — being a fixed distance apart isn't enough.
+ */
+private fun guessFromKgGrid(distinct: List<Float>): WeightConfig? {
+    val step = KG_GRID_STEPS.firstOrNull { k ->
+        distinct.all { isCloseToMultiple(it, k, tolerance = 0.05f) }
+    } ?: return null
+    return WeightConfig(mode = WeightMode.STEP, stepKg = step)
 }
 
 /** Pin/plate sizes in lb worth testing as a candidate step, coarsest first. */
