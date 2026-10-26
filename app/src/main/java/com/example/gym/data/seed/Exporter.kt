@@ -1,6 +1,9 @@
 package com.example.gym.data.seed
 
 import com.example.gym.data.LiftLogDatabase
+import com.example.gym.data.WeightMode
+import com.example.gym.data.WeightRoundMode
+import com.example.gym.data.weightConfig
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -25,8 +28,25 @@ data class ExportMuscleGroup(val name: String, val muscles: List<ExportArea>)
 @Serializable
 data class ExportArea(val name: String, val exercises: List<ExportExercise>)
 
+/** Custom weight-wheel increments for an exercise; absent for exercises on the default wheel. */
 @Serializable
-data class ExportExercise(val name: String, val archived: Boolean = false, val setRows: List<ExportSetRow>)
+data class ExportWeightConfig(
+    val mode: String,
+    val stepKg: Float? = null,
+    val heavyThresholdKg: Float? = null,
+    val heavyStepKg: Float? = null,
+    val startLbs: Float? = null,
+    val stepLbs: Float? = null,
+    val roundMode: String = WeightRoundMode.UP.name,
+)
+
+@Serializable
+data class ExportExercise(
+    val name: String,
+    val archived: Boolean = false,
+    val weightConfig: ExportWeightConfig? = null,
+    val setRows: List<ExportSetRow>,
+)
 
 @Serializable
 data class ExportSetRow(
@@ -68,6 +88,17 @@ object Exporter {
                                         ExportExercise(
                                             name = e.name,
                                             archived = e.archived,
+                                            weightConfig = e.weightConfig().takeIf { it.mode != WeightMode.DEFAULT }?.let { c ->
+                                                ExportWeightConfig(
+                                                    mode = c.mode.name,
+                                                    stepKg = c.stepKg,
+                                                    heavyThresholdKg = c.heavyThresholdKg,
+                                                    heavyStepKg = c.heavyStepKg,
+                                                    startLbs = c.startLbs,
+                                                    stepLbs = c.stepLbs,
+                                                    roundMode = c.roundMode.name,
+                                                )
+                                            },
                                             setRows = setRows[e.id].orEmpty().map { sr ->
                                                 ExportSetRow(
                                                     note = sr.note,
