@@ -1471,7 +1471,7 @@ private fun WeightIncrementDialog(
                     WeightMode.POUNDS -> Column {
                         Text(
                             "The equipment's real increments, in pounds — converted to kg (rounded to " +
-                                "1 decimal place) since the app always displays weight in kg.",
+                                "1 decimal place, or to whole kg) since the app always displays weight in kg.",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1487,6 +1487,7 @@ private fun WeightIncrementDialog(
                             ModeChip("Up", roundMode == WeightRoundMode.UP) { roundMode = WeightRoundMode.UP }
                             ModeChip("Down", roundMode == WeightRoundMode.DOWN) { roundMode = WeightRoundMode.DOWN }
                             ModeChip("Nearest", roundMode == WeightRoundMode.NEAREST) { roundMode = WeightRoundMode.NEAREST }
+                            ModeChip("Whole kg", roundMode == WeightRoundMode.WHOLE_KG) { roundMode = WeightRoundMode.WHOLE_KG }
                         }
                     }
                 }

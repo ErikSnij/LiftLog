@@ -20,8 +20,12 @@ enum class Flag { NONE, UP, DOWN }
  */
 enum class WeightMode { DEFAULT, STEP, POUNDS }
 
-/** Rounding direction applied when converting a POUNDS-mode step to kg. */
-enum class WeightRoundMode { UP, DOWN, NEAREST }
+/**
+ * How a POUNDS-mode step is rounded when converted to kg. UP/DOWN/NEAREST work at 0.1kg precision;
+ * WHOLE_KG rounds to the nearest whole kg, matching machines whose plates are printed with
+ * whole-kg labels (e.g. 280 lb = "127kg").
+ */
+enum class WeightRoundMode { UP, DOWN, NEAREST, WHOLE_KG }
 
 @Entity(tableName = "category")
 data class CategoryEntity(
