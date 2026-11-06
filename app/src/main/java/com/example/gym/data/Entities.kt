@@ -181,4 +181,10 @@ data class LogEntryEntity(
     val reps: Float?,
     val weight: Float?,
     @ColumnInfo(name = "date") val date: LocalDate,
+    /**
+     * Weight added by hand on top of [weight] (clip-on plates on a stack machine, say) — [weight]
+     * stays the pin/bar value so it keeps matching the exercise's weight wheel. Null = none. New
+     * entries inherit it from the row's latest entry, so it only needs setting when it changes.
+     */
+    val extraKg: Float? = null,
 )

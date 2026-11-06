@@ -56,7 +56,7 @@ data class ExportSetRow(
 )
 
 @Serializable
-data class ExportEntry(val reps: Float?, val weight: Float?, val date: String)
+data class ExportEntry(val reps: Float?, val weight: Float?, val date: String, val extraKg: Float? = null)
 
 /** Serialises the entire database (full history included) to pretty JSON. */
 object Exporter {
@@ -106,7 +106,7 @@ object Exporter {
                                                     entries = entries[sr.id].orEmpty()
                                                         .sortedBy { it.date }
                                                         .map { en ->
-                                                            ExportEntry(en.reps, en.weight, en.date.toString())
+                                                            ExportEntry(en.reps, en.weight, en.date.toString(), en.extraKg)
                                                         },
                                                 )
                                             },

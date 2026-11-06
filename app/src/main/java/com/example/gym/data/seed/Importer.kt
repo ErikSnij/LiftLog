@@ -76,6 +76,7 @@ object Importer {
                                                 reps = e.reps,
                                                 weight = e.weight,
                                                 date = LocalDate.parse(e.date),
+                                                extraKg = e.extraKg,
                                             )
                                         )
                                         entryCount++

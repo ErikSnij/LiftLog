@@ -230,6 +230,17 @@ interface LiftLogDao {
     @Query("SELECT * FROM log_entry WHERE setRowId = :setRowId AND date = :date LIMIT 1")
     suspend fun getLogEntryForDate(setRowId: Long, date: java.time.LocalDate): LogEntryEntity?
 
+    /** Sets (or clears, with null) the add-on weight on every entry of an exercise, across its rows. */
+    @Query(
+        "UPDATE log_entry SET extraKg = :extraKg " +
+            "WHERE setRowId IN (SELECT id FROM set_row WHERE exerciseId = :exerciseId)"
+    )
+    suspend fun setExtraForExercise(exerciseId: Long, extraKg: Float?)
+
+    /** The add-on weight on this row's newest entry (null if none), which new entries inherit. */
+    @Query("SELECT extraKg FROM log_entry WHERE setRowId = :setRowId ORDER BY date DESC, id DESC LIMIT 1")
+    suspend fun latestExtraKg(setRowId: Long): Float?
+
     // ---- Body weight -------------------------------------------------------
 
     @Query("SELECT * FROM body_weight ORDER BY date DESC")
@@ -370,7 +381,8 @@ interface LiftLogDao {
     @Query(
         """
         SELECT le.id AS id, le.setRowId AS setRowId, e.id AS exerciseId, e.name AS exerciseName,
-               le.reps AS reps, le.weight AS weight, le.date AS date, sr.note AS note, sr.flag AS flag
+               le.reps AS reps, le.weight AS weight, le.extraKg AS extraKg, le.date AS date,
+               sr.note AS note, sr.flag AS flag
         FROM log_entry le
         JOIN set_row sr ON sr.id = le.setRowId
         JOIN exercise e ON e.id = sr.exerciseId

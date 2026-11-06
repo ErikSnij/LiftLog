@@ -45,6 +45,7 @@ data class SyncLogEntryRow(
     val exerciseName: String,
     val reps: Float?,
     val weight: Float?,
+    val extraKg: Float?,
     val date: LocalDate,
     val note: String?,
     val flag: Flag,

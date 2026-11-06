@@ -16,12 +16,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +45,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
@@ -74,6 +82,8 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
 
     var metric by remember { mutableStateOf(Metric.REPS_AT_MAX) }
     var draft by remember { mutableStateOf<LogEntryEntity?>(null) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var showBulkExtra by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     fun newDraft(): LogEntryEntity? {
@@ -83,6 +93,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
             reps = history.firstOrNull()?.reps,
             weight = history.firstOrNull()?.weight,
             date = LocalDate.now(),
+            extraKg = history.firstOrNull()?.extraKg,
         )
     }
 
@@ -106,6 +117,24 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
             )
+            // Rarely-needed actions live behind this, out of the way.
+            Box {
+                Text(
+                    "⋯",
+                    fontSize = 20.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { menuOpen = true }
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                )
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Add-on weight for all entries…") },
+                        onClick = { menuOpen = false; showBulkExtra = true },
+                    )
+                }
+            }
         }
         HorizontalDivider()
 
@@ -122,6 +151,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                 weightConfig = weightConfig,
                 onRepsSelected = { draft = draft?.copy(reps = it) },
                 onWeightSelected = { draft = draft?.copy(weight = it) },
+                onExtraSelected = { draft = draft?.copy(extraKg = it) },
                 onDateShift = { days -> draft = draft?.let { it.copy(date = it.date.plusDays(days)) } },
                 onYearShift = { years -> draft = draft?.let { it.copy(date = it.date.plusYears(years)) } },
                 onSave = {
@@ -193,7 +223,72 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
         }
     }
         SwipeDismissSnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+
+        if (showBulkExtra) {
+            BulkExtraDialog(
+                initial = history.firstOrNull()?.extraKg,
+                onDismiss = { showBulkExtra = false },
+                onApply = { extra ->
+                    showBulkExtra = false
+                    val before = history
+                    scope.launch {
+                        dao.setExtraForExercise(exerciseId, extra)
+                        before.map { it.date }.distinct().forEach { dao.enqueueDateForSync(SyncQueueEntity(date = it)) }
+                        TrainHubSyncWorker.requestImmediateSync(context)
+                        val res = snackbarHostState.showSnackbar(
+                            message = if (extra == null) "Add-on cleared on ${before.size} entries"
+                            else "Add-on set on ${before.size} entries",
+                            actionLabel = "Undo",
+                            duration = SnackbarDuration.Short,
+                        )
+                        if (res == SnackbarResult.ActionPerformed) {
+                            before.forEach { dao.updateLogEntry(it) }
+                            before.map { it.date }.distinct().forEach { dao.enqueueDateForSync(SyncQueueEntity(date = it)) }
+                            TrainHubSyncWorker.requestImmediateSync(context)
+                        }
+                    }
+                },
+            )
+        }
     }
+}
+
+@Composable
+private fun BulkExtraDialog(initial: Float?, onDismiss: () -> Unit, onApply: (Float?) -> Unit) {
+    var text by remember { mutableStateOf(initial?.let(::trimFloat) ?: "") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add-on weight") },
+        text = {
+            Column {
+                Text(
+                    "Weight added by hand on top of the stack or bar. This replaces the add-on on " +
+                        "every entry of this exercise; edit a single entry afterwards to change just that one.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.replace(',', '.').filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text("kg") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onApply(text.toFloatOrNull()) }, enabled = text.toFloatOrNull() != null) {
+                Text("Apply to all")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { onApply(null) }) { Text("Clear all") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 @Composable
@@ -234,7 +329,11 @@ private fun ToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeights: List<BodyWeightEntity>) {
     val sortedBW = remember(bodyWeights) { bodyWeights.sortedBy { it.date } }
     val points = remember(history, metric, sortedBW) {
-        fun resolvedWeight(e: LogEntryEntity) = e.weight ?: sortedBW.lastOrNull { it.date <= e.date }?.weight
+        // The load actually lifted: pin/bar (or body weight) plus any hand-added extra.
+        fun resolvedWeight(e: LogEntryEntity): Float? {
+            val base = e.weight ?: sortedBW.lastOrNull { it.date <= e.date }?.weight
+            return if (base != null) base + (e.extraKg ?: 0f) else e.extraKg
+        }
         val maxWeightEver = if (metric == Metric.REPS_AT_MAX) history.mapNotNull(::resolvedWeight).maxOrNull() else null
         history.sortedBy { it.date }.mapNotNull { e ->
             val w = resolvedWeight(e)
@@ -387,12 +486,12 @@ private fun EntryRow(entry: LogEntryEntity, selected: Boolean, onClick: () -> Un
     ) {
         Text(formatDate(entry.date), fontSize = 13.sp, modifier = Modifier.width(110.dp))
         Text(
-            formatValue(entry.reps, entry.weight),
+            formatValue(entry.reps, entry.weight) + (entry.extraKg?.let { " +${trimFloat(it)}" } ?: ""),
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f),
         )
-        val oneRm = epley(entry.reps, entry.weight)
+        val oneRm = epley(entry.reps, totalWeight(entry.weight, entry.extraKg))
         Text(
             if (oneRm != null) "1RM ${round1(oneRm)}" else "",
             fontSize = 11.sp,
@@ -409,6 +508,7 @@ private fun EntryEditor(
     weightConfig: WeightConfig,
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
+    onExtraSelected: (Float?) -> Unit,
     onDateShift: (Long) -> Unit,
     onYearShift: (Long) -> Unit,
     onSave: () -> Unit,
@@ -454,6 +554,50 @@ private fun EntryEditor(
                     StepperButton("+1y") { onYearShift(1) }
                 }
             }
+        }
+        // Add-on weight is rare, so it stays a quiet link until it's actually wanted (or already set).
+        var showExtra by remember(draft.id) { mutableStateOf(draft.extraKg != null) }
+        if (showExtra) {
+            var extraText by remember(draft.id) { mutableStateOf(draft.extraKg?.let(::trimFloat) ?: "") }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Add-on", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(
+                    value = extraText,
+                    onValueChange = {
+                        extraText = it.replace(',', '.').filter { c -> c.isDigit() || c == '.' }
+                        onExtraSelected(extraText.toFloatOrNull())
+                    },
+                    suffix = { Text("kg", fontSize = 12.sp) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.width(112.dp),
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "Remove",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onExtraSelected(null); extraText = ""; showExtra = false }
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                )
+            }
+        } else {
+            Text(
+                "+ add-on weight",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { showExtra = true }
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+            )
         }
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
