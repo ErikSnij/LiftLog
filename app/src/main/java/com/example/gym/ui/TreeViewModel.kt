@@ -513,17 +513,52 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveWeightIncrements(exerciseId: Long, config: WeightConfig) {
         dialog = null
+        viewModelScope.launch { writeWeightConfig(exerciseId, config) }
+    }
+
+    private suspend fun writeWeightConfig(exerciseId: Long, config: WeightConfig) {
+        dao.updateWeightConfig(
+            exerciseId = exerciseId,
+            mode = config.mode,
+            stepKg = config.stepKg,
+            heavyThresholdKg = config.heavyThresholdKg,
+            heavyStepKg = config.heavyStepKg,
+            startLbs = config.startLbs,
+            stepLbs = config.stepLbs,
+            roundMode = config.roundMode,
+        )
+    }
+
+    /** A short message surfaced via snackbar that has nothing to undo. */
+    var notice by mutableStateOf<String?>(null)
+        private set
+
+    fun clearNotice() { notice = null }
+
+    /**
+     * Runs the history guess over every visible exercise still on the default wheel and applies
+     * whatever it finds in one go (undoable). Exercises already configured are left alone, so
+     * undo only ever has to put them back to the default wheel.
+     */
+    fun guessAllWeightIncrements() {
         viewModelScope.launch {
-            dao.updateWeightConfig(
-                exerciseId = exerciseId,
-                mode = config.mode,
-                stepKg = config.stepKg,
-                heavyThresholdKg = config.heavyThresholdKg,
-                heavyStepKg = config.heavyStepKg,
-                startLbs = config.startLbs,
-                stepLbs = config.stepLbs,
-                roundMode = config.roundMode,
-            )
+            val changed = mutableListOf<Long>()
+            for (exercise in dao.allExercises()) {
+                if (exercise.archived || exercise.weightMode != WeightMode.DEFAULT) continue
+                val config = guessWeightConfig(dao.weightHistoryForExercise(exercise.id)) ?: continue
+                writeWeightConfig(exercise.id, config)
+                changed += exercise.id
+            }
+            // A pending suggestion for an exercise that was just configured is moot.
+            if (weightSuggestion?.let { it.exerciseId in changed } == true) weightSuggestion = null
+            if (changed.isEmpty()) {
+                notice = "No exercise has a clear increment pattern yet"
+                return@launch
+            }
+            val n = changed.size
+            undoRequest = UndoRequest("Set increments for $n exercise${if (n == 1) "" else "s"}") {
+                changed.forEach { writeWeightConfig(it, WeightConfig()) }
+            }
         }
     }
 

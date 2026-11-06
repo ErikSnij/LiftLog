@@ -15,6 +15,11 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -54,6 +59,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -222,22 +228,44 @@ fun TreeScreen(
         if (result == SnackbarResult.ActionPerformed) vm.performUndo() else vm.clearUndo()
     }
 
-    // Queues behind the "Logged today" Undo snackbar (SnackbarHostState shows them one at a time).
-    val suggestion = vm.weightSuggestion
-    LaunchedEffect(suggestion) {
-        if (suggestion == null) return@LaunchedEffect
-        val result = snackbarHostState.showSnackbar(
-            message = suggestion.message,
-            actionLabel = "Apply",
-            duration = SnackbarDuration.Long,
-        )
-        if (result == SnackbarResult.ActionPerformed) vm.applyWeightSuggestion() else vm.clearWeightSuggestion()
+    // Plain messages with nothing to undo (e.g. "guess all" found no patterns).
+    val notice = vm.notice
+    LaunchedEffect(notice) {
+        if (notice == null) return@LaunchedEffect
+        snackbarHostState.showSnackbar(notice)
+        vm.clearNotice()
     }
+
+    // The weight-increment suggestion is a banner rather than a snackbar: it stays until it's
+    // applied or dismissed instead of timing out (or waiting its turn behind the Undo snackbar).
+    val suggestion = vm.weightSuggestion
+    var lastSuggestion by remember { mutableStateOf<TreeViewModel.WeightSuggestion?>(null) }
+    SideEffect { if (suggestion != null) lastSuggestion = suggestion } // so the banner can animate out
+    val bannerSuggestion = suggestion ?: lastSuggestion
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SwipeDismissSnackbarHost(snackbarHostState) },
+        // The banner sits above the snackbar host, so an Undo snackbar pushes it up rather than
+        // covering it.
+        snackbarHost = {
+            Column {
+                AnimatedVisibility(
+                    visible = suggestion != null,
+                    enter = slideInVertically { it } + fadeIn(),
+                    exit = slideOutVertically { it } + fadeOut(),
+                ) {
+                    bannerSuggestion?.let {
+                        WeightSuggestionBanner(
+                            message = it.message,
+                            onApply = vm::applyWeightSuggestion,
+                            onDismiss = vm::clearWeightSuggestion,
+                        )
+                    }
+                }
+                SwipeDismissSnackbarHost(snackbarHostState)
+            }
+        },
     ) { inner ->
         Box(
             modifier = Modifier
@@ -255,6 +283,7 @@ fun TreeScreen(
                     onToggleArchived = vm::updateShowArchived,
                     onExport = { scope.launch { shareExport(context, app) } },
                     onSaveToFiles = { saveJson.launch("liftlog-export-${LocalDate.now()}.json") },
+                    onGuessAll = vm::guessAllWeightIncrements,
                     onImport = { pickJson.launch(arrayOf("application/json", "text/plain")) },
                     onAddCategory = vm::promptAddCategory,
                     onBodyWeight = onOpenBodyWeight,
@@ -1771,6 +1800,7 @@ private fun TopBar(
     onToggleArchived: (Boolean) -> Unit,
     onExport: () -> Unit,
     onSaveToFiles: () -> Unit,
+    onGuessAll: () -> Unit,
     onImport: () -> Unit,
     onAddCategory: () -> Unit,
     onBodyWeight: () -> Unit,
@@ -1819,6 +1849,7 @@ private fun TopBar(
                 onDismiss = { menuOpen = false },
                 onExport = { menuOpen = false; onExport() },
                 onSaveToFiles = { menuOpen = false; onSaveToFiles() },
+                onGuessAll = { menuOpen = false; onGuessAll() },
                 onImport = { menuOpen = false; onImport() },
                 onToggleArchived = onToggleArchived,
                 onOpenSettings = { menuOpen = false; onOpenSettings() },
@@ -1876,6 +1907,7 @@ private fun AppMenu(
     onDismiss: () -> Unit,
     onExport: () -> Unit,
     onSaveToFiles: () -> Unit,
+    onGuessAll: () -> Unit,
     onImport: () -> Unit,
     onToggleArchived: (Boolean) -> Unit,
     onOpenSettings: () -> Unit,
@@ -1952,6 +1984,26 @@ private fun AppMenu(
                 Text("Import data", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Text(
                     "Restore from a JSON backup",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(onClick = onGuessAll)
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconChip { StepsGlyph(it) }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Guess all increments", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    "Fill in steps from history",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -2067,6 +2119,58 @@ private fun ImportGlyph(tint: Color) {
             lineTo(w * 0.78f, h * 0.60f)
         }
         drawPath(tray, tint, style = s)
+    }
+}
+
+/** Staircase glyph for the guess-all-increments action. */
+@Composable
+private fun StepsGlyph(tint: Color) {
+    Canvas(modifier = Modifier.size(20.dp)) {
+        val w = size.width
+        val h = size.height
+        val s = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val stairs = Path().apply {
+            moveTo(w * 0.14f, h * 0.82f)
+            lineTo(w * 0.14f, h * 0.62f)
+            lineTo(w * 0.38f, h * 0.62f)
+            lineTo(w * 0.38f, h * 0.42f)
+            lineTo(w * 0.62f, h * 0.42f)
+            lineTo(w * 0.62f, h * 0.22f)
+            lineTo(w * 0.86f, h * 0.22f)
+        }
+        drawPath(stairs, tint, style = s)
+    }
+}
+
+/**
+ * Persistent suggestion shown after logging a weight on an exercise whose history looks like a
+ * fixed increment. Unlike a snackbar it doesn't time out: it stays until applied or dismissed.
+ */
+@Composable
+private fun WeightSuggestionBanner(message: String, onApply: () -> Unit, onDismiss: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 3.dp,
+        shadowElevation = 8.dp,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(message, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            TextButton(onClick = onApply) { Text("Apply", fontWeight = FontWeight.Bold) }
+            Text(
+                "✕",
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable(onClick = onDismiss)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        }
     }
 }
 
