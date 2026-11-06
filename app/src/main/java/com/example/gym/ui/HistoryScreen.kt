@@ -149,6 +149,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                 draft = d,
                 isNew = d.id == 0L,
                 weightConfig = weightConfig,
+                addOnEnabled = exercise?.addOnWeight == true,
                 onRepsSelected = { draft = draft?.copy(reps = it) },
                 onWeightSelected = { draft = draft?.copy(weight = it) },
                 onExtraSelected = { draft = draft?.copy(extraKg = it) },
@@ -161,6 +162,8 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                     val previousDate = if (!isNew) history.find { it.id == d.id }?.date else null
                     scope.launch {
                         if (isNew) dao.insertLogEntry(d) else dao.updateLogEntry(d)
+                        // Using an add-on at all means this exercise tracks one.
+                        if (d.extraKg != null) dao.setAddOnWeight(exerciseId, true)
                         dao.enqueueDateForSync(SyncQueueEntity(date = d.date))
                         if (previousDate != null && previousDate != d.date) {
                             dao.enqueueDateForSync(SyncQueueEntity(date = previousDate))
@@ -233,6 +236,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                     val before = history
                     scope.launch {
                         dao.setExtraForExercise(exerciseId, extra)
+                        if (extra != null) dao.setAddOnWeight(exerciseId, true)
                         before.map { it.date }.distinct().forEach { dao.enqueueDateForSync(SyncQueueEntity(date = it)) }
                         TrainHubSyncWorker.requestImmediateSync(context)
                         val res = snackbarHostState.showSnackbar(
@@ -506,6 +510,7 @@ private fun EntryEditor(
     draft: LogEntryEntity,
     isNew: Boolean = false,
     weightConfig: WeightConfig,
+    addOnEnabled: Boolean,
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
     onExtraSelected: (Float?) -> Unit,
@@ -555,8 +560,9 @@ private fun EntryEditor(
                 }
             }
         }
-        // Add-on weight is rare, so it stays a quiet link until it's actually wanted (or already set).
-        var showExtra by remember(draft.id) { mutableStateOf(draft.extraKg != null) }
+        // Add-on weight is rare, so it stays a quiet link unless this exercise has it switched on
+        // (row menu in the tree) or the entry already has one.
+        var showExtra by remember(draft.id) { mutableStateOf(draft.extraKg != null || addOnEnabled) }
         if (showExtra) {
             var extraText by remember(draft.id) { mutableStateOf(draft.extraKg?.let(::trimFloat) ?: "") }
             Row(

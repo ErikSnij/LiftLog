@@ -50,6 +50,7 @@ object Importer {
                                         areaId = areaId,
                                         name = ex.name,
                                         archived = ex.archived,
+                                        addOnWeight = ex.addOnWeight,
                                         weightMode = wc?.let { runCatching { WeightMode.valueOf(it.mode) }.getOrNull() }
                                             ?: WeightMode.DEFAULT,
                                         weightStepKg = wc?.stepKg,

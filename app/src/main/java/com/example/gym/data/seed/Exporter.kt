@@ -45,6 +45,7 @@ data class ExportExercise(
     val name: String,
     val archived: Boolean = false,
     val weightConfig: ExportWeightConfig? = null,
+    val addOnWeight: Boolean = false,
     val setRows: List<ExportSetRow>,
 )
 
@@ -88,6 +89,7 @@ object Exporter {
                                         ExportExercise(
                                             name = e.name,
                                             archived = e.archived,
+                                            addOnWeight = e.addOnWeight,
                                             weightConfig = e.weightConfig().takeIf { it.mode != WeightMode.DEFAULT }?.let { c ->
                                                 ExportWeightConfig(
                                                     mode = c.mode.name,

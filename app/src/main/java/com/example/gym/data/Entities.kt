@@ -99,6 +99,12 @@ data class ExerciseEntity(
     val weightStartLbs: Float? = null,
     val weightStepLbs: Float? = null,
     val weightRoundMode: WeightRoundMode = WeightRoundMode.UP,
+    /**
+     * Whether this exercise tracks a hand-added weight on top of the pin/bar (see
+     * [LogEntryEntity.extraKg]). Off by default; turning it on shows the add-on in the tree rows
+     * and gives the inline editor an add-on wheel.
+     */
+    val addOnWeight: Boolean = false,
 )
 
 /**

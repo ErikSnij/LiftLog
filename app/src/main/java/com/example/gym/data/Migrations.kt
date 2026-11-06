@@ -234,5 +234,20 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
     }
 }
 
+/**
+ * v9 → v10: a per-exercise switch for the add-on weight. Off for everything except exercises that
+ * already have an add-on logged (set from the History screen), so those keep showing it.
+ */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `exercise` ADD COLUMN `addOnWeight` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            "UPDATE `exercise` SET `addOnWeight` = 1 WHERE `id` IN (" +
+                "SELECT sr.exerciseId FROM `set_row` sr " +
+                "JOIN `log_entry` le ON le.setRowId = sr.id WHERE le.extraKg IS NOT NULL)",
+        )
+    }
+}
+
 /** Escape single quotes for inline SQL literals (none of our names use them, but be safe). */
 private fun String.sqlEscape(): String = replace("'", "''")

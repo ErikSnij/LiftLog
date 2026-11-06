@@ -26,6 +26,7 @@ data class SetRowUi(
     val id: Long,
     val reps: Float?,
     val weight: Float?,
+    val extraKg: Float?,
     val note: String?,
     val flag: Flag,
     val date: LocalDate?,
@@ -40,6 +41,7 @@ data class ExerciseUi(
     val setRows: List<SetRowUi>,
     val archived: Boolean = false,
     val weightConfig: WeightConfig = WeightConfig(),
+    val addOnWeight: Boolean = false,
 )
 
 data class AreaUi(
@@ -136,6 +138,7 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                                 id = row.id,
                                 reps = entry?.reps,
                                 weight = entry?.weight,
+                                extraKg = entry?.extraKg,
                                 note = row.note,
                                 flag = row.flag,
                                 date = entry?.date,
@@ -150,6 +153,7 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                             rowUis,
                             exercise.archived,
                             exercise.weightConfig(),
+                            exercise.addOnWeight,
                         )
                     }.sortedWith(compareByDescending { it.lastPerformed })
                     AreaUi(area.id, area.name, areaLastById[area.id], exerciseUis)
@@ -289,6 +293,7 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         val setRowId: Long,
         val reps: Float?,
         val weight: Float?,
+        val extraKg: Float?,
         val armed: Boolean = false,
         val showWheels: Boolean = false,
     )
@@ -297,15 +302,15 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     /** Tap the date → arm this row for commit (show checkmark), keeping any pending edits. */
-    fun armDate(setRowId: Long, currentReps: Float?, currentWeight: Float?) {
+    fun armDate(setRowId: Long, currentReps: Float?, currentWeight: Float?, currentExtra: Float?) {
         val current = edit?.takeIf { it.setRowId == setRowId }
-        edit = (current ?: EditState(setRowId, currentReps, currentWeight)).copy(armed = true)
+        edit = (current ?: EditState(setRowId, currentReps, currentWeight, currentExtra)).copy(armed = true)
     }
 
     /** Tap reps × weight → reveal the inline wheels, keeping any pending/armed state. */
-    fun openWheels(setRowId: Long, currentReps: Float?, currentWeight: Float?) {
+    fun openWheels(setRowId: Long, currentReps: Float?, currentWeight: Float?, currentExtra: Float?) {
         val current = edit?.takeIf { it.setRowId == setRowId }
-        edit = (current ?: EditState(setRowId, currentReps, currentWeight)).copy(showWheels = true)
+        edit = (current ?: EditState(setRowId, currentReps, currentWeight, currentExtra)).copy(showWheels = true)
     }
 
     fun setPendingReps(reps: Float?) {
@@ -314,6 +319,15 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setPendingWeight(weight: Float?) {
         edit = edit?.copy(weight = weight)
+    }
+
+    fun setPendingExtra(extraKg: Float?) {
+        edit = edit?.copy(extraKg = extraKg)
+    }
+
+    /** Row-menu switch: whether this exercise tracks a hand-added weight (shown in rows, editable inline). */
+    fun setAddOnWeight(exerciseId: Long, enabled: Boolean) {
+        viewModelScope.launch { dao.setAddOnWeight(exerciseId, enabled) }
     }
 
     /** Tap anywhere else → cancel, no write. */
@@ -329,7 +343,7 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
             val today = LocalDate.now()
             val existing = dao.getLogEntryForDate(state.setRowId, today)
             if (existing != null) {
-                val updated = existing.copy(reps = state.reps, weight = state.weight)
+                val updated = existing.copy(reps = state.reps, weight = state.weight, extraKg = state.extraKg)
                 dao.updateLogEntry(updated)
                 enqueueSync(today)
                 undoRequest = UndoRequest("Updated today's log") { dao.updateLogEntry(existing); enqueueSync(today) }
@@ -340,7 +354,8 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                         reps = state.reps,
                         weight = state.weight,
                         date = today,
-                        extraKg = dao.latestExtraKg(state.setRowId),
+                        // Starts from the row's latest add-on (see openWheels), so it carries over.
+                        extraKg = state.extraKg,
                     ),
                 )
                 enqueueSync(today)
