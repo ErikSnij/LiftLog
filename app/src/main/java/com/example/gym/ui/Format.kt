@@ -39,6 +39,13 @@ internal fun olderYear(date: LocalDate?): Int? =
 internal fun epley(reps: Float?, weight: Float?): Float? =
     if (reps != null && weight != null) weight * (1f + reps / 30f) else null
 
+/**
+ * The load actually lifted: [weight] (pin/bar) plus any hand-added [extraKg]. An entry with only
+ * an add-on counts as that load alone; null when neither is known.
+ */
+internal fun totalWeight(weight: Float?, extraKg: Float?): Float? =
+    if (weight != null) weight + (extraKg ?: 0f) else extraKg
+
 /** Round to 1 decimal place and trim a trailing ".0" (avoids float-artifact labels). */
 internal fun round1(value: Float): String = trimFloat(Math.round(value * 10f) / 10f)
 

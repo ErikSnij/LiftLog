@@ -1899,7 +1899,10 @@ private fun TopBar(
     }
 }
 
-/** Styled overflow menu for app-level actions (export, import, show-archived toggle). */
+/**
+ * Styled overflow menu for app-level actions, grouped by purpose: data backup as one row of
+ * compact tiles, exercise tools, and sync.
+ */
 @Composable
 private fun AppMenu(
     expanded: Boolean,
@@ -1921,154 +1924,157 @@ private fun AppMenu(
         shadowElevation = 14.dp,
         modifier = Modifier.width(268.dp),
     ) {
-        Text(
-            text = "LIFTLOG",
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.5.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 22.dp, top = 12.dp, bottom = 2.dp),
+        MenuSection("Data", topPadding = 12.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MenuTile("Share", { ExportGlyph(it) }, onExport, Modifier.weight(1f))
+            MenuTile("Save file", { SaveGlyph(it) }, onSaveToFiles, Modifier.weight(1f))
+            MenuTile("Import", { ImportGlyph(it) }, onImport, Modifier.weight(1f))
+        }
+
+        MenuSection("Exercises")
+        MenuRow(
+            icon = { StepsGlyph(it) },
+            title = "Guess all increments",
+            subtitle = "Fill in steps from history",
+            onClick = onGuessAll,
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 2.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .clickable(onClick = onExport)
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconChip { ExportGlyph(it) }
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Export data", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(
-                    "Share your log as JSON",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        MenuRow(
+            icon = { ArchiveGlyph(it) },
+            title = "Show archived",
+            onClick = { onToggleArchived(!showArchived) },
+            trailing = {
+                Switch(
+                    checked = showArchived,
+                    onCheckedChange = onToggleArchived,
+                    modifier = Modifier.scale(0.72f),
                 )
-            }
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 2.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .clickable(onClick = onSaveToFiles)
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconChip { ExportGlyph(it) }
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Save to Files", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(
-                    "Download your log as a JSON file",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 2.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .clickable(onClick = onImport)
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconChip { ImportGlyph(it) }
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Import data", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(
-                    "Restore from a JSON backup",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 2.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .clickable(onClick = onGuessAll)
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconChip { StepsGlyph(it) }
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Guess all increments", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(
-                    "Fill in steps from history",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 2.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .clickable { onToggleArchived(!showArchived) }
-                .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconChip { ArchiveGlyph(it) }
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Show archived", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(
-                    "Reveal retired exercises",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = showArchived,
-                onCheckedChange = onToggleArchived,
-                modifier = Modifier.scale(0.72f),
-            )
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 2.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .clickable(onClick = onOpenSettings)
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconChip { SettingsGlyph(it) }
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("TrainHub sync", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(
-                    "Server URL and API key",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+            },
+        )
+
+        MenuSection("Sync")
+        MenuRow(
+            icon = { SettingsGlyph(it) },
+            title = "TrainHub sync",
+            subtitle = "Server URL and API key",
+            onClick = onOpenSettings,
+        )
         Spacer(Modifier.height(6.dp))
+    }
+}
+
+/** Small caps label that starts a group of menu items. */
+@Composable
+private fun MenuSection(label: String, topPadding: Dp = 10.dp) {
+    Text(
+        text = label.uppercase(),
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.5.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 22.dp, top = topPadding, bottom = 2.dp),
+    )
+}
+
+/** One compact menu item: icon chip, a title, an optional second line and an optional trailing control. */
+@Composable
+private fun MenuRow(
+    icon: @Composable (Color) -> Unit,
+    title: String,
+    onClick: () -> Unit,
+    subtitle: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 1.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(start = 12.dp, end = if (trailing != null) 8.dp else 12.dp, top = 5.dp, bottom = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconChip(size = 32.dp, glyph = icon)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        trailing?.invoke()
+    }
+}
+
+/** An icon-over-label button, several of which sit side by side for closely related actions. */
+@Composable
+private fun MenuTile(
+    label: String,
+    icon: @Composable (Color) -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        IconChip(size = 32.dp, glyph = icon)
+        Spacer(Modifier.height(4.dp))
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }
 
 /** A round tinted background behind a small line-drawn glyph, used in the app menu. */
 @Composable
-private fun IconChip(glyph: @Composable (Color) -> Unit) {
+private fun IconChip(size: Dp = 38.dp, glyph: @Composable (Color) -> Unit) {
     Box(
         modifier = Modifier
-            .size(38.dp)
+            .size(size)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center,
     ) {
         glyph(MaterialTheme.colorScheme.onPrimaryContainer)
+    }
+}
+
+/** File-with-down-arrow glyph for saving the export to a file. */
+@Composable
+private fun SaveGlyph(tint: Color) {
+    Canvas(modifier = Modifier.size(20.dp)) {
+        val w = size.width
+        val h = size.height
+        val s = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val file = Path().apply {
+            moveTo(w * 0.24f, h * 0.10f)
+            lineTo(w * 0.60f, h * 0.10f)
+            lineTo(w * 0.80f, h * 0.30f)
+            lineTo(w * 0.80f, h * 0.90f)
+            lineTo(w * 0.24f, h * 0.90f)
+            close()
+            moveTo(w * 0.60f, h * 0.10f)
+            lineTo(w * 0.60f, h * 0.30f)
+            lineTo(w * 0.80f, h * 0.30f)
+        }
+        drawPath(file, tint, style = s)
+        val arrow = Path().apply {
+            moveTo(w * 0.52f, h * 0.44f)
+            lineTo(w * 0.52f, h * 0.72f)
+            moveTo(w * 0.40f, h * 0.60f)
+            lineTo(w * 0.52f, h * 0.72f)
+            lineTo(w * 0.64f, h * 0.60f)
+        }
+        drawPath(arrow, tint, style = s)
     }
 }
 

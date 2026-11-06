@@ -340,6 +340,7 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
                         reps = state.reps,
                         weight = state.weight,
                         date = today,
+                        extraKg = dao.latestExtraKg(state.setRowId),
                     ),
                 )
                 enqueueSync(today)

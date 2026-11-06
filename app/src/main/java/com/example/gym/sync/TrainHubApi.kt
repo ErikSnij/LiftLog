@@ -35,6 +35,8 @@ data class RawLogEntry(
     val date: String,
     val note: String?,
     val flag: String,
+    /** Hand-added weight; [weight] stays the pin/bar value here (the sets' `weight` carries the total). */
+    val extraKg: Float? = null,
 )
 
 @Serializable

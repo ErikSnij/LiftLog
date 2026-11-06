@@ -224,5 +224,15 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
     }
 }
 
+/**
+ * v8 → v9: per-entry add-on weight (plates added by hand on top of the stack/bar weight).
+ * Nullable, so every existing entry keeps meaning exactly what it did.
+ */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `log_entry` ADD COLUMN `extraKg` REAL")
+    }
+}
+
 /** Escape single quotes for inline SQL literals (none of our names use them, but be safe). */
 private fun String.sqlEscape(): String = replace("'", "''")

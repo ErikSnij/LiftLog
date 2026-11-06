@@ -13,6 +13,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.gym.LiftLogApp
 import com.example.gym.data.LiftLogDao
+import com.example.gym.ui.totalWeight
 import java.io.IOException
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
@@ -60,7 +61,14 @@ class TrainHubSyncWorker(context: Context, params: WorkerParameters) : Coroutine
             ExercisePayload(
                 name = key.second,
                 sets = rows.map { row ->
-                    SetPayload(reps = row.reps, weight = row.weight, note = row.note, flag = row.flag.name)
+                    // `weight` is the total load so the dashboard's 1RM math counts any add-on;
+                    // the pin value and the add-on stay separately in raw_payload.
+                    SetPayload(
+                        reps = row.reps,
+                        weight = totalWeight(row.weight, row.extraKg),
+                        note = row.note,
+                        flag = row.flag.name,
+                    )
                 },
             )
         }
@@ -75,6 +83,7 @@ class TrainHubSyncWorker(context: Context, params: WorkerParameters) : Coroutine
                 date = row.date.toString(),
                 note = row.note,
                 flag = row.flag.name,
+                extraKg = row.extraKg,
             )
         }
         val body = StrengthSessionRequest(
