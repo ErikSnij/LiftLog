@@ -36,7 +36,8 @@ interface LiftLogDao {
     /** The newest log entry per set row (ties broken by id). The row's displayed value. */
     @Query(
         """
-        SELECT le.setRowId AS setRowId, le.reps AS reps, le.weight AS weight, le.date AS date
+        SELECT le.setRowId AS setRowId, le.reps AS reps, le.weight AS weight,
+               le.extraKg AS extraKg, le.date AS date
         FROM log_entry le
         WHERE le.id = (
             SELECT le2.id FROM log_entry le2
@@ -237,9 +238,8 @@ interface LiftLogDao {
     )
     suspend fun setExtraForExercise(exerciseId: Long, extraKg: Float?)
 
-    /** The add-on weight on this row's newest entry (null if none), which new entries inherit. */
-    @Query("SELECT extraKg FROM log_entry WHERE setRowId = :setRowId ORDER BY date DESC, id DESC LIMIT 1")
-    suspend fun latestExtraKg(setRowId: Long): Float?
+    @Query("UPDATE exercise SET addOnWeight = :enabled WHERE id = :exerciseId")
+    suspend fun setAddOnWeight(exerciseId: Long, enabled: Boolean)
 
     // ---- Body weight -------------------------------------------------------
 

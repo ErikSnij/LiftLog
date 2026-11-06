@@ -7,6 +7,7 @@ data class LatestEntry(
     val setRowId: Long,
     val reps: Float?,
     val weight: Float?,
+    val extraKg: Float?,
     val date: LocalDate,
 )
 

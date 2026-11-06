@@ -21,6 +21,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -45,7 +46,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -382,13 +382,15 @@ fun TreeScreen(
                                             weightConfig = exercise.weightConfig,
                                             row = row,
                                             edit = edit?.takeIf { it.setRowId == row.id },
-                                            onValueTap = { vm.openWheels(row.id, row.reps, row.weight) },
-                                            onDateTap = { vm.armDate(row.id, row.reps, row.weight) },
+                                            showAddOn = exercise.addOnWeight,
+                                            onValueTap = { vm.openWheels(row.id, row.reps, row.weight, row.extraKg) },
+                                            onDateTap = { vm.armDate(row.id, row.reps, row.weight, row.extraKg) },
                                             onFlagTap = { vm.cycleFlag(row.id, row.flag) },
                                             onConfirm = vm::confirm,
                                             onCancel = vm::cancelEdit,
                                             onRepsSelected = vm::setPendingReps,
                                             onWeightSelected = vm::setPendingWeight,
+                                            onExtraSelected = vm::setPendingExtra,
                                             onHistory = {
                                                 vm.saveScrollPosition(
                                                     listState.firstVisibleItemIndex,
@@ -407,6 +409,7 @@ fun TreeScreen(
                                             archived = exercise.archived,
                                             isFirstRow = index == 0,
                                             rowCount = rows.size,
+                                            addOnWeight = exercise.addOnWeight,
                                             onDismiss = vm::closeMenu,
                                             onEditNote = {
                                                 vm.showDialog(TreeViewModel.RowDialog.EditNote(row.id, row.note))
@@ -422,6 +425,7 @@ fun TreeScreen(
                                             onWeightIncrements = {
                                                 vm.promptWeightIncrements(exercise.id, exercise.weightConfig)
                                             },
+                                            onToggleAddOn = { vm.setAddOnWeight(exercise.id, !exercise.addOnWeight) },
                                             onMoveExercise = { vm.promptMoveExercise(exercise.id) },
                                         )
                                     }
@@ -769,22 +773,69 @@ private fun HeaderMenu(
     onMoveDown: (() -> Unit)? = null,
     onCollapseAllAreas: (() -> Unit)? = null,
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        onMoveUp?.let { action ->
-            DropdownMenuItem(text = { Text("Move up") }, onClick = { onDismiss(); action() })
-        }
-        onMoveDown?.let { action ->
-            DropdownMenuItem(text = { Text("Move down") }, onClick = { onDismiss(); action() })
-        }
+    ContextMenu(expanded, onDismiss) {
+        // Ordering/layout actions first, then rename, then the destructive one on its own.
+        onMoveUp?.let { action -> MenuAction("Move up", { onDismiss(); action() }) }
+        onMoveDown?.let { action -> MenuAction("Move down", { onDismiss(); action() }) }
         onCollapseAllAreas?.let { action ->
-            DropdownMenuItem(text = { Text("Collapse / expand all areas") }, onClick = { onDismiss(); action() })
+            MenuAction("Collapse / expand all areas", { onDismiss(); action() })
         }
-        DropdownMenuItem(text = { Text(renameLabel) }, onClick = onRename)
-        DropdownMenuItem(
-            text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
-            onClick = onDelete,
-        )
+        if (onMoveUp != null || onMoveDown != null || onCollapseAllAreas != null) MenuDivider()
+        MenuAction(renameLabel, onRename)
+        MenuDivider()
+        MenuAction(deleteLabel, onDelete, destructive = true)
     }
+}
+
+/** Shared look for the long-press context menus: rounded surface, fixed width, compact rows. */
+@Composable
+private fun ContextMenu(expanded: Boolean, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(18.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 2.dp,
+        shadowElevation = 14.dp,
+        modifier = Modifier.width(236.dp),
+        content = content,
+    )
+}
+
+/** One compact (about 40dp) context-menu row; [destructive] tints it as a warning. */
+@Composable
+private fun MenuAction(
+    text: String,
+    onClick: () -> Unit,
+    destructive: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(start = 14.dp, end = if (trailing != null) 8.dp else 14.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            fontSize = 14.sp,
+            color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        trailing?.invoke()
+    }
+}
+
+/** Thin rule that separates groups of context-menu rows. */
+@Composable
+private fun MenuDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+    )
 }
 
 /** A small "+" affordance used on headers to add a child (area / exercise / category). */
@@ -896,6 +947,7 @@ private fun SetRowLine(
     weightConfig: WeightConfig,
     row: SetRowUi,
     edit: TreeViewModel.EditState?,
+    showAddOn: Boolean,
     onValueTap: () -> Unit,
     onDateTap: () -> Unit,
     onFlagTap: () -> Unit,
@@ -903,6 +955,7 @@ private fun SetRowLine(
     onCancel: () -> Unit,
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
+    onExtraSelected: (Float?) -> Unit,
     onHistory: () -> Unit,
     onNoteTap: () -> Unit,
     onLongPress: () -> Unit,
@@ -917,6 +970,7 @@ private fun SetRowLine(
     // While editing, show the pending values (initialised from current).
     val shownReps = edit?.reps ?: row.reps
     val shownWeight = edit?.weight ?: row.weight
+    val shownExtra = if (edit != null) edit.extraKg else row.extraKg
 
     val today = LocalDate.now()
     val daysSince = if (row.date != null) (today.toEpochDay() - row.date.toEpochDay()).coerceAtLeast(0L) else Long.MAX_VALUE
@@ -966,9 +1020,12 @@ private fun SetRowLine(
                     modifier = Modifier.weight(1f),
                     reps = edit.reps,
                     weight = edit.weight,
+                    extraKg = edit.extraKg,
+                    showAddOn = showAddOn,
                     weightConfig = weightConfig,
                     onRepsSelected = onRepsSelected,
                     onWeightSelected = onWeightSelected,
+                    onExtraSelected = onExtraSelected,
                     onConfirm = onConfirm,
                     onCancel = onCancel,
                 )
@@ -1019,8 +1076,18 @@ private fun SetRowLine(
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     )
                 } else {
+                    // The add-on (only for exercises that track one) trails the value in a smaller,
+                    // quieter style so the pin weight stays the thing you read first.
+                    val valueLabel = buildAnnotatedString {
+                        append(formatValue(shownReps, shownWeight))
+                        if (showAddOn && shownExtra != null) {
+                            withStyle(SpanStyle(fontSize = 11.sp, color = mutedColor)) {
+                                append(" +${trimFloat(shownExtra)}")
+                            }
+                        }
+                    }
                     Text(
-                        text = formatValue(shownReps, shownWeight),
+                        text = valueLabel,
                         fontSize = 13.sp,
                         color = baseColor,
                         maxLines = 1,
@@ -1108,9 +1175,12 @@ private fun WheelEditBar(
     modifier: Modifier,
     reps: Float?,
     weight: Float?,
+    extraKg: Float?,
+    showAddOn: Boolean,
     weightConfig: WeightConfig,
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
+    onExtraSelected: (Float?) -> Unit,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -1137,9 +1207,12 @@ private fun WheelEditBar(
         ValueWheels(
             reps = reps,
             weight = weight,
+            extraKg = extraKg,
+            showAddOn = showAddOn,
             weightConfig = weightConfig,
             onRepsSelected = onRepsSelected,
             onWeightSelected = onWeightSelected,
+            onExtraSelected = onExtraSelected,
         )
         Spacer(Modifier.weight(1f))
         Text(
@@ -1159,12 +1232,16 @@ private fun WheelEditBar(
 private fun ValueWheels(
     reps: Float?,
     weight: Float?,
+    extraKg: Float?,
+    showAddOn: Boolean,
     weightConfig: WeightConfig,
     onRepsSelected: (Float?) -> Unit,
     onWeightSelected: (Float?) -> Unit,
+    onExtraSelected: (Float?) -> Unit,
 ) {
     val repsValues = remember { wheelValues(60f, step = 1f) }
     val weightValues = remember(weightConfig) { weightWheelValues(weightConfig) }
+    val extraValues = remember { wheelValues(60f, step = 0.5f) }
     // Swallow stray taps so they don't bubble up and cancel the edit.
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1186,6 +1263,16 @@ private fun ValueWheels(
             blankLabel = "BW",
             onSelected = onWeightSelected,
         )
+        if (showAddOn) {
+            Text("+", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            WheelOrTypeField(
+                items = extraValues,
+                current = extraKg,
+                width = 52.dp,
+                blankLabel = "—",
+                onSelected = onExtraSelected,
+            )
+        }
     }
 }
 
@@ -1308,6 +1395,7 @@ private fun RowMenu(
     archived: Boolean,
     isFirstRow: Boolean,
     rowCount: Int,
+    addOnWeight: Boolean,
     onDismiss: () -> Unit,
     onEditNote: () -> Unit,
     onRename: () -> Unit,
@@ -1317,34 +1405,41 @@ private fun RowMenu(
     onDelete: () -> Unit,
     onDeleteExercise: () -> Unit,
     onWeightIncrements: () -> Unit,
+    onToggleAddOn: () -> Unit,
     onMoveExercise: () -> Unit,
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+    ContextMenu(expanded, onDismiss) {
         if (archived) {
-            DropdownMenuItem(text = { Text("Resurrect") }, onClick = onResurrect)
+            MenuAction("Resurrect", onResurrect)
         } else {
-            DropdownMenuItem(text = { Text("Edit note") }, onClick = onEditNote)
-            DropdownMenuItem(text = { Text("Rename exercise") }, onClick = onRename)
-            DropdownMenuItem(text = { Text("Add set row") }, onClick = onAddSetRow)
+            // This row.
+            MenuAction("Edit note", onEditNote)
+            MenuAction("Add set row", onAddSetRow)
+            MenuDivider()
+            // The exercise: its name, then (name-bearing first row only) how its weight works and
+            // where it lives. The add-on switch is rarely needed, so it lives here and stays off
+            // until wanted; the menu stays open so the switch visibly flips.
+            MenuAction("Rename exercise", onRename)
             if (isFirstRow) {
-                DropdownMenuItem(text = { Text("Weight increments…") }, onClick = onWeightIncrements)
-                DropdownMenuItem(text = { Text("Move to muscle group…") }, onClick = onMoveExercise)
-            }
-            DropdownMenuItem(text = { Text("Archive") }, onClick = onArchive)
-            // "Delete row" available on any row when there are multiple rows.
-            if (rowCount > 1) {
-                DropdownMenuItem(
-                    text = { Text("Delete row", color = MaterialTheme.colorScheme.error) },
-                    onClick = onDelete,
+                MenuAction("Weight increments…", onWeightIncrements)
+                MenuAction(
+                    text = "Add-on weight",
+                    onClick = onToggleAddOn,
+                    trailing = {
+                        Switch(
+                            checked = addOnWeight,
+                            onCheckedChange = { onToggleAddOn() },
+                            modifier = Modifier.scale(0.72f),
+                        )
+                    },
                 )
+                MenuAction("Move to muscle group…", onMoveExercise)
             }
-            // "Delete exercise" available on the first (name-bearing) row.
-            if (isFirstRow) {
-                DropdownMenuItem(
-                    text = { Text("Delete exercise", color = MaterialTheme.colorScheme.error) },
-                    onClick = onDeleteExercise,
-                )
-            }
+            MenuDivider()
+            // Ways to remove it: archive is reversible, the deletes are not.
+            MenuAction("Archive", onArchive)
+            if (rowCount > 1) MenuAction("Delete row", onDelete, destructive = true)
+            if (isFirstRow) MenuAction("Delete exercise", onDeleteExercise, destructive = true)
         }
     }
 }
