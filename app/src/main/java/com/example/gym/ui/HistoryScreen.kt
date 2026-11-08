@@ -399,6 +399,14 @@ private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeig
             else cLeft + hPad + (d - minD).toFloat() / dRange * (cW - 2 * hPad)
         fun yOf(v: Float) = cBottom - (v - yLo) / (yHi - yLo) * cH
 
+        // Regular, calendar-aligned date ticks (weeks or months) so the gaps between sessions can
+        // be read off the axis; empty when the range is too short for two of them.
+        val ticks = dateTicks(points.first().date, points.last().date)
+        ticks.forEach { t ->
+            val tx = xOf(t.date.toEpochDay())
+            drawLine(axisColor.copy(alpha = 0.25f), Offset(tx, cTop), Offset(tx, cBottom), strokeWidth = 1f)
+        }
+
         // Axis lines
         drawLine(axisColor, Offset(cLeft, cTop), Offset(cLeft, cBottom), strokeWidth = 1.5f)
         drawLine(axisColor, Offset(cLeft, cBottom), Offset(cRight, cBottom), strokeWidth = 1.5f)
@@ -454,22 +462,28 @@ private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeig
                 )
             }
 
-            // X date labels: all points if ≤ 5, otherwise first + last only
-            val dateIndices = if (points.size <= 5) points.indices.toList() else listOf(0, points.size - 1)
             val datePaint = android.graphics.Paint().apply {
                 textSize = labelSp; isAntiAlias = true; color = labelColor.toArgb()
             }
-            dateIndices.forEach { i ->
-                val ox = offsets[i].x
-                datePaint.textAlign = when {
-                    ox < cLeft + cW * 0.25f -> android.graphics.Paint.Align.LEFT
-                    ox > cLeft + cW * 0.75f -> android.graphics.Paint.Align.RIGHT
-                    else                     -> android.graphics.Paint.Align.CENTER
+            val dateY = cBottom + labelSp + with(density) { 3.dp.toPx() }
+            if (ticks.isNotEmpty()) {
+                // X axis: one label per regular tick, centred under its gridline.
+                datePaint.textAlign = android.graphics.Paint.Align.CENTER
+                ticks.forEach { t ->
+                    canvas.nativeCanvas.drawText(t.label, xOf(t.date.toEpochDay()), dateY, datePaint)
                 }
-                canvas.nativeCanvas.drawText(
-                    formatMonthDay(points[i].date),
-                    ox, cBottom + labelSp + with(density) { 3.dp.toPx() }, datePaint,
-                )
+            } else {
+                // Range too short to tick: label the points themselves (all if ≤ 5, else first + last).
+                val dateIndices = if (points.size <= 5) points.indices.toList() else listOf(0, points.size - 1)
+                dateIndices.forEach { i ->
+                    val ox = offsets[i].x
+                    datePaint.textAlign = when {
+                        ox < cLeft + cW * 0.25f -> android.graphics.Paint.Align.LEFT
+                        ox > cLeft + cW * 0.75f -> android.graphics.Paint.Align.RIGHT
+                        else                     -> android.graphics.Paint.Align.CENTER
+                    }
+                    canvas.nativeCanvas.drawText(formatMonthDay(points[i].date), ox, dateY, datePaint)
+                }
             }
         }
     }
