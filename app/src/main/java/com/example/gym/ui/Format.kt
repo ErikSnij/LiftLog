@@ -1,7 +1,10 @@
 package com.example.gym.ui
 
+import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.Month
 import java.time.format.TextStyle
+import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
 /** Drops a trailing ".0" so 120.0 → "120" but keeps 117.5 → "117.5". */
@@ -29,6 +32,56 @@ internal fun formatDate(date: LocalDate?): String {
 internal fun formatMonthDay(date: LocalDate): String {
     val mon = date.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH).lowercase()
     return "%s %02d".format(mon, date.dayOfMonth)
+}
+
+/** A labelled position on the History chart's date axis. */
+internal data class DateTick(val date: LocalDate, val label: String)
+
+/** Candidate tick spacings, finest first, as (days, months) — exactly one of the two is non-zero. */
+private val DATE_TICK_STEPS = listOf(7 to 0, 14 to 0, 0 to 1, 0 to 2, 0 to 3, 0 to 6, 0 to 12, 0 to 24)
+
+/**
+ * Evenly spaced, calendar-aligned ticks for a date axis running [first]..[last]: Mondays for short
+ * ranges, otherwise the 1st of every 1/2/3/6/12/24 months (aligned to the calendar, so a 3-month
+ * step is always Jan/Apr/Jul/Oct). Uses the finest spacing that fits in [maxTicks] labels, so
+ * the gaps between sessions can be read off the axis. Empty when the range is too short for two
+ * ticks (or too long for any spacing), in which case the caller labels the data points instead.
+ */
+internal fun dateTicks(first: LocalDate, last: LocalDate, maxTicks: Int = 6): List<DateTick> {
+    if (!last.isAfter(first)) return emptyList()
+    for ((days, months) in DATE_TICK_STEPS) {
+        val dates = tickDates(first, last, days, months)
+        if (dates.size > maxTicks) continue // too crowded — try a coarser spacing
+        if (dates.size < 2) return emptyList()
+        // Months drop the day number; the year shows on January and where the axis crosses a year.
+        val crossesYear = first.year != last.year
+        return dates.mapIndexed { i, d ->
+            val label = if (months == 0) formatMonthDay(d)
+            else monthLabel(d, showYear = d.month == Month.JANUARY || (i == 0 && crossesYear))
+            DateTick(d, label)
+        }
+    }
+    return emptyList()
+}
+
+private fun tickDates(first: LocalDate, last: LocalDate, days: Int, months: Int): List<LocalDate> {
+    val out = mutableListOf<LocalDate>()
+    if (days > 0) {
+        var d = first.with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY))
+        while (!d.isAfter(last)) { out += d; d = d.plusDays(days.toLong()) }
+    } else {
+        var d = first.withDayOfMonth(1)
+        if (d.isBefore(first)) d = d.plusMonths(1)
+        // Align to the calendar: month index 0 is January of year 0, so step 3 lands on Jan/Apr/...
+        while ((d.year * 12 + d.monthValue - 1) % months != 0) d = d.plusMonths(1)
+        while (!d.isAfter(last)) { out += d; d = d.plusMonths(months.toLong()) }
+    }
+    return out
+}
+
+private fun monthLabel(date: LocalDate, showYear: Boolean): String {
+    val mon = date.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH).lowercase()
+    return if (showYear) "%s '%02d".format(mon, date.year % 100) else mon
 }
 
 /** The year to show beside a date when it predates the current year (signals "old"), else null. */
