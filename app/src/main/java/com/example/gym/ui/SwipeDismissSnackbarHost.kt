@@ -4,6 +4,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarHost
@@ -79,6 +81,15 @@ private fun SwipeDismissSnackbar(data: SnackbarData) {
                 )
             },
     ) {
-        Snackbar(snackbarData = data)
+        // Styled as the same card as the in-app banners (e.g. the weight-increment suggestion), so
+        // when both are on screen they read as one tray rather than two unrelated pieces.
+        Snackbar(
+            snackbarData = data,
+            shape = RoundedCornerShape(16.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            actionColor = MaterialTheme.colorScheme.primary,
+            dismissActionContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

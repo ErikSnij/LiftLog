@@ -246,10 +246,12 @@ fun TreeScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        // The banner sits above the snackbar host, so an Undo snackbar pushes it up rather than
-        // covering it.
+        // One tray at the bottom edge. The suggestion banner is the bottom-most card and stays put;
+        // short-lived snackbars (Undo, notices) appear above it, so nothing already on screen gets
+        // pushed around when one arrives or leaves. Both share the same card styling.
         snackbarHost = {
             Column {
+                SwipeDismissSnackbarHost(snackbarHostState)
                 AnimatedVisibility(
                     visible = suggestion != null,
                     enter = slideInVertically { it } + fadeIn(),
@@ -263,7 +265,6 @@ fun TreeScreen(
                         )
                     }
                 }
-                SwipeDismissSnackbarHost(snackbarHostState)
             }
         },
     ) { inner ->
@@ -2254,7 +2255,8 @@ private fun WeightSuggestionBanner(message: String, onApply: () -> Unit, onDismi
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 3.dp,
         shadowElevation = 8.dp,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        // Same 12dp inset as a snackbar's own padding, so the two line up when stacked.
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
     ) {
         Row(
             modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
