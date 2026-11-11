@@ -403,6 +403,7 @@ fun TreeScreen(
                                             onNoteTap = {
                                                 vm.showDialog(TreeViewModel.RowDialog.EditNote(row.id, row.note))
                                             },
+                                            onNoteDelete = { vm.deleteNote(row.id, row.note) },
                                             onLongPress = { vm.openMenu(row.id) },
                                         )
                                         RowMenu(
@@ -959,6 +960,7 @@ private fun SetRowLine(
     onExtraSelected: (Float?) -> Unit,
     onHistory: () -> Unit,
     onNoteTap: () -> Unit,
+    onNoteDelete: () -> Unit,
     onLongPress: () -> Unit,
 ) {
     val baseColor =
@@ -1152,18 +1154,26 @@ private fun SetRowLine(
             }
         }
 
-        // Note lives on its own line beneath the row; tap to edit it.
+        // Note lives on its own line beneath the row; tap to edit it, hold for edit / delete.
         if (!row.note.isNullOrBlank()) {
-            Text(
-                text = row.note,
-                fontSize = 11.sp,
-                fontStyle = FontStyle.Italic,
-                color = mutedColor,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onNoteTap)
-                    .padding(start = 30.dp, end = 12.dp, bottom = 3.dp),
-            )
+            var noteMenuOpen by remember { mutableStateOf(false) }
+            Box {
+                Text(
+                    text = row.note,
+                    fontSize = 11.sp,
+                    fontStyle = FontStyle.Italic,
+                    color = mutedColor,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .combinedClickable(onClick = onNoteTap, onLongClick = { noteMenuOpen = true })
+                        .padding(start = 30.dp, end = 12.dp, bottom = 3.dp),
+                )
+                ContextMenu(noteMenuOpen, { noteMenuOpen = false }) {
+                    MenuAction("Edit note", { noteMenuOpen = false; onNoteTap() })
+                    MenuDivider()
+                    MenuAction("Delete note", { noteMenuOpen = false; onNoteDelete() }, destructive = true)
+                }
+            }
         }
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
