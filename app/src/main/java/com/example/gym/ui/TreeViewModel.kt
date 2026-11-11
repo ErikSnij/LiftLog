@@ -510,6 +510,15 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { dao.updateNote(setRowId, clean) }
     }
 
+    /** Clears a row's note, with an Undo that puts the old text back. */
+    fun deleteNote(setRowId: Long, previous: String?) {
+        if (previous.isNullOrBlank()) return
+        viewModelScope.launch {
+            dao.updateNote(setRowId, null)
+            undoRequest = UndoRequest("Note deleted") { dao.updateNote(setRowId, previous) }
+        }
+    }
+
     fun saveRename(exerciseId: Long, name: String) {
         dialog = null
         val clean = name.trim()
