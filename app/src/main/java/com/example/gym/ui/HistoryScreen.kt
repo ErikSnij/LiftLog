@@ -1,7 +1,10 @@
 package com.example.gym.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -30,6 +34,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,7 +89,66 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
     var draft by remember { mutableStateOf<LogEntryEntity?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var showBulkExtra by remember { mutableStateOf(false) }
+    var showBulkEdit by remember { mutableStateOf(false) }
+    // Multi-select: non-empty means the list is in selection mode (tap toggles, no single editor).
+    var selectedIds by remember { mutableStateOf(setOf<Long>()) }
+    val selecting = selectedIds.isNotEmpty()
+    val selected = history.filter { it.id in selectedIds }
     val snackbarHostState = remember { SnackbarHostState() }
+    // Back leaves selection mode first, before it leaves the screen.
+    BackHandler(enabled = selecting) { selectedIds = emptySet() }
+    // Entries that vanish (deleted, undone) shouldn't linger in the selection.
+    LaunchedEffect(history) {
+        val live = history.mapTo(HashSet()) { it.id }
+        if (selectedIds.any { it !in live }) selectedIds = selectedIds.filterTo(HashSet()) { it in live }
+    }
+
+    /** Applies [transform] to every selected entry, re-queues the affected days, and offers Undo. */
+    fun editSelected(message: String, transform: (LogEntryEntity) -> LogEntryEntity) {
+        val before = selected
+        if (before.isEmpty()) return
+        val after = before.map(transform)
+        scope.launch {
+            after.forEach { dao.updateLogEntry(it) }
+            if (after.any { it.extraKg != null }) dao.setAddOnWeight(exerciseId, true)
+            (before.map { it.date } + after.map { it.date }).distinct()
+                .forEach { dao.enqueueDateForSync(SyncQueueEntity(date = it)) }
+            TrainHubSyncWorker.requestImmediateSync(context)
+            val res = snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            if (res == SnackbarResult.ActionPerformed) {
+                before.forEach { dao.updateLogEntry(it) }
+                (before.map { it.date } + after.map { it.date }).distinct()
+                    .forEach { dao.enqueueDateForSync(SyncQueueEntity(date = it)) }
+                TrainHubSyncWorker.requestImmediateSync(context)
+            }
+        }
+    }
+
+    fun deleteSelected() {
+        val doomed = selected
+        if (doomed.isEmpty()) return
+        selectedIds = emptySet()
+        scope.launch {
+            doomed.forEach { dao.deleteLogEntry(it.id) }
+            doomed.map { it.date }.distinct().forEach { dao.enqueueDateForSync(SyncQueueEntity(date = it)) }
+            TrainHubSyncWorker.requestImmediateSync(context)
+            val res = snackbarHostState.showSnackbar(
+                message = if (doomed.size == 1) "Entry deleted" else "${doomed.size} entries deleted",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            // Re-insert with the original ids so the chart/history restore exactly.
+            if (res == SnackbarResult.ActionPerformed) {
+                doomed.forEach { dao.insertLogEntry(it) }
+                doomed.map { it.date }.distinct().forEach { dao.enqueueDateForSync(SyncQueueEntity(date = it)) }
+                TrainHubSyncWorker.requestImmediateSync(context)
+            }
+        }
+    }
 
     fun newDraft(): LogEntryEntity? {
         val srId = firstSetRowId ?: return null
@@ -197,35 +261,94 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
             HorizontalDivider()
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "History (${history.size})",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+        if (selecting) {
+            SelectionBar(
+                count = selected.size,
+                allSelected = selected.size == history.size,
+                onSelectAll = { selectedIds = history.mapTo(HashSet()) { it.id } },
+                onEdit = { showBulkEdit = true },
+                onDelete = ::deleteSelected,
+                onClear = { selectedIds = emptySet() },
             )
-            Spacer(Modifier.weight(1f))
-            Text(
-                "+ Add",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { if (draft == null) newDraft()?.let { draft = it } }
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            )
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "History (${history.size})",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "Select",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = history.isNotEmpty()) {
+                            draft = null
+                            selectedIds = setOf(history.first().id)
+                        }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+                Text(
+                    "+ Add",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { if (draft == null) newDraft()?.let { draft = it } }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
         }
 
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             items(history, key = { it.id }) { entry ->
-                EntryRow(entry, selected = draft?.id == entry.id) { draft = entry }
+                EntryRow(
+                    entry = entry,
+                    selected = if (selecting) entry.id in selectedIds else draft?.id == entry.id,
+                    selecting = selecting,
+                    onClick = {
+                        if (selecting) {
+                            selectedIds = if (entry.id in selectedIds) selectedIds - entry.id else selectedIds + entry.id
+                        } else {
+                            draft = entry
+                        }
+                    },
+                    onLongClick = {
+                        // Holding an entry starts selecting with it already ticked.
+                        draft = null
+                        selectedIds = selectedIds + entry.id
+                    },
+                )
             }
         }
     }
         SwipeDismissSnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+
+        if (showBulkEdit && selecting) {
+            BulkEditDialog(
+                count = selected.size,
+                onDismiss = { showBulkEdit = false },
+                onApply = { change ->
+                    showBulkEdit = false
+                    val n = selected.size
+                    editSelected("Edited $n ${if (n == 1) "entry" else "entries"}") { e ->
+                        e.copy(
+                            reps = change.reps ?: e.reps,
+                            weight = change.weight ?: e.weight,
+                            extraKg = if (change.clearExtra) null else change.extraKg ?: e.extraKg,
+                            date = e.date.plusDays(change.shiftDays.toLong()),
+                        )
+                    }
+                },
+            )
+        }
 
         if (showBulkExtra) {
             BulkExtraDialog(
@@ -489,8 +612,135 @@ private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeig
     }
 }
 
+/** Header shown instead of "History (n)" while entries are being multi-selected. */
 @Composable
-private fun EntryRow(entry: LogEntryEntity, selected: Boolean, onClick: () -> Unit) {
+private fun SelectionBar(
+    count: Int,
+    allSelected: Boolean,
+    onSelectAll: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onClear: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+            .padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextButton(onClick = onClear) { Text("✕") }
+        Text("$count selected", fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        if (!allSelected) TextButton(onClick = onSelectAll) { Text("All") }
+        TextButton(onClick = onEdit) { Text("Edit") }
+        TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+    }
+}
+
+/** What a bulk edit changes; null / false / 0 mean "leave as is". */
+private data class BulkChange(
+    val reps: Float?,
+    val weight: Float?,
+    val extraKg: Float?,
+    val clearExtra: Boolean,
+    val shiftDays: Int,
+)
+
+@Composable
+private fun BulkEditDialog(count: Int, onDismiss: () -> Unit, onApply: (BulkChange) -> Unit) {
+    var reps by remember { mutableStateOf("") }
+    var weight by remember { mutableStateOf("") }
+    var extra by remember { mutableStateOf("") }
+    var clearExtra by remember { mutableStateOf(false) }
+    var shift by remember { mutableStateOf("") }
+
+    fun decimal(s: String) = s.replace(',', '.').filter { it.isDigit() || it == '.' }
+    val change = BulkChange(
+        reps = reps.toFloatOrNull(),
+        weight = weight.toFloatOrNull(),
+        extraKg = if (clearExtra) null else extra.toFloatOrNull(),
+        clearExtra = clearExtra,
+        shiftDays = shift.toIntOrNull() ?: 0,
+    )
+    val anyChange = change.reps != null || change.weight != null || change.extraKg != null ||
+        change.clearExtra || change.shiftDays != 0
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit $count ${if (count == 1) "entry" else "entries"}") },
+        text = {
+            Column {
+                Text(
+                    "Only filled-in fields change; leave a field empty to keep each entry's own value.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = reps,
+                        onValueChange = { reps = decimal(it) },
+                        label = { Text("Reps") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = weight,
+                        onValueChange = { weight = decimal(it) },
+                        label = { Text("Weight kg") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = extra,
+                    onValueChange = { extra = decimal(it); if (it.isNotEmpty()) clearExtra = false },
+                    label = { Text("Add-on kg") },
+                    singleLine = true,
+                    enabled = !clearExtra,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { clearExtra = !clearExtra; if (clearExtra) extra = "" },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = clearExtra, onCheckedChange = { clearExtra = it; if (it) extra = "" })
+                    Text("Remove add-on", fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = shift,
+                    onValueChange = { v -> shift = v.filterIndexed { i, c -> c.isDigit() || (i == 0 && c == '-') } },
+                    label = { Text("Shift dates by days (e.g. -1)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onApply(change) }, enabled = anyChange) { Text("Apply") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun EntryRow(
+    entry: LogEntryEntity,
+    selected: Boolean,
+    selecting: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -498,10 +748,18 @@ private fun EntryRow(entry: LogEntryEntity, selected: Boolean, onClick: () -> Un
                 if (selected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
                 else Modifier
             )
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (selecting) {
+            Text(
+                if (selected) "☑" else "☐",
+                fontSize = 16.sp,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.width(28.dp),
+            )
+        }
         Text(formatDate(entry.date), fontSize = 13.sp, modifier = Modifier.width(110.dp))
         Text(
             formatValue(entry.reps, entry.weight) + (entry.extraKg?.let { " +${trimFloat(it)}" } ?: ""),
