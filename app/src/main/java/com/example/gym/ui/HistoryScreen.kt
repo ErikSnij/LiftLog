@@ -337,6 +337,21 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                 onDismiss = { showBulkEdit = false },
                 onApply = { change ->
                     showBulkEdit = false
+                    // A row is meant to have one entry per day (the tree's "log today" updates that
+                    // one), so refuse a shift that would stack two entries on the same row and day.
+                    if (change.shiftDays != 0) {
+                        val taken = history.filter { it.id !in selectedIds }.mapTo(HashSet()) { it.setRowId to it.date }
+                        val moved = selected.map { it.setRowId to it.date.plusDays(change.shiftDays.toLong()) }
+                        if (moved.any { it in taken } || moved.toSet().size < moved.size) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Not applied: a shifted entry would land on a day that already has one",
+                                    duration = SnackbarDuration.Short,
+                                )
+                            }
+                            return@BulkEditDialog
+                        }
+                    }
                     val n = selected.size
                     editSelected("Edited $n ${if (n == 1) "entry" else "entries"}") { e ->
                         e.copy(
