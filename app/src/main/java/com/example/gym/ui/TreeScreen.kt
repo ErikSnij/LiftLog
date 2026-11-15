@@ -128,6 +128,7 @@ fun TreeScreen(
 ) {
     val vm: TreeViewModel = viewModel()
     val tree by vm.tree.collectAsStateWithLifecycle()
+    val progress by vm.progress.collectAsStateWithLifecycle()
     val showArchived = vm.showArchived
     val edit = vm.edit
 
@@ -309,6 +310,7 @@ fun TreeScreen(
                             CategoryHeader(
                                 modifier = Modifier.onGloballyPositioned { catHeightPx = it.size.height },
                                 name = category.name,
+                                trend = progress.categories[category.id],
                                 onAddMuscleGroup = { vm.promptAddMuscleGroup(category.id) },
                                 menuExpanded = vm.menuForCategory == category.id,
                                 onLongPress = { vm.openCategoryMenu(category.id) },
@@ -328,6 +330,7 @@ fun TreeScreen(
                                     modifier = Modifier.onGloballyPositioned { groupHeightPx = it.size.height },
                                     name = group.name,
                                     date = group.lastPerformed,
+                                    trend = progress.muscleGroups[group.id],
                                     collapsed = groupCollapsed,
                                     onToggle = { vm.toggleMuscleGroup(group.id) },
                                     onAddArea = { vm.promptAddArea(group.id) },
@@ -351,6 +354,7 @@ fun TreeScreen(
                                     modifier = Modifier.onGloballyPositioned { areaHeightPx = it.size.height },
                                     name = area.name,
                                     date = area.lastPerformed,
+                                    trend = progress.areas[area.id],
                                     collapsed = areaCollapsed,
                                     onToggle = { vm.toggleArea(area.id) },
                                     onAddExercise = { vm.promptAddExercise(area.id) },
@@ -458,6 +462,7 @@ fun TreeScreen(
                                 AreaHeader(
                                     name = pinnedArea.name,
                                     date = pinnedArea.lastPerformed,
+                                    trend = progress.areas[pinnedArea.id],
                                     collapsed = pinnedArea.id in vm.collapsedAreas,
                                     onToggle = { vm.toggleArea(pinnedArea.id) },
                                     onAddExercise = { vm.promptAddExercise(pinnedArea.id) },
@@ -482,6 +487,7 @@ fun TreeScreen(
                                 MuscleGroupHeader(
                                     name = pinnedGroup.name,
                                     date = pinnedGroup.lastPerformed,
+                                    trend = progress.muscleGroups[pinnedGroup.id],
                                     collapsed = pinnedGroup.id in vm.collapsedMuscleGroups,
                                     onToggle = { vm.toggleMuscleGroup(pinnedGroup.id) },
                                     onAddArea = { vm.promptAddArea(pinnedGroup.id) },
@@ -506,6 +512,7 @@ fun TreeScreen(
                             ) {
                                 CategoryHeader(
                                     name = pinnedCategory.name,
+                                    trend = progress.categories[pinnedCategory.id],
                                     onAddMuscleGroup = { vm.promptAddMuscleGroup(pinnedCategory.id) },
                                     menuExpanded = vm.menuForCategory == pinnedCategory.id,
                                     onLongPress = { vm.openCategoryMenu(pinnedCategory.id) },
@@ -653,6 +660,7 @@ private fun buildPinnedIdsMap(
 @Composable
 private fun CategoryHeader(
     name: String,
+    trend: Trend?,
     onAddMuscleGroup: () -> Unit,
     menuExpanded: Boolean,
     onLongPress: () -> Unit,
@@ -680,6 +688,7 @@ private fun CategoryHeader(
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.weight(1f),
                 )
+                TrendBadge(trend, MaterialTheme.colorScheme.onPrimaryContainer)
                 AddButton(tint = MaterialTheme.colorScheme.onPrimaryContainer, onClick = onAddMuscleGroup)
             }
             HeaderMenu(
@@ -702,6 +711,7 @@ private fun CategoryHeader(
 private fun MuscleGroupHeader(
     name: String,
     date: LocalDate?,
+    trend: Trend?,
     collapsed: Boolean,
     onToggle: () -> Unit,
     onAddArea: () -> Unit,
@@ -741,6 +751,7 @@ private fun MuscleGroupHeader(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            TrendBadge(trend, MaterialTheme.colorScheme.onSecondaryContainer)
             Text(
                 text = formatDate(date),
                 fontSize = 11.sp,
@@ -859,6 +870,7 @@ private fun AddButton(tint: Color, onClick: () -> Unit) {
 private fun AreaHeader(
     name: String,
     date: LocalDate?,
+    trend: Trend?,
     collapsed: Boolean,
     onToggle: () -> Unit,
     onAddExercise: () -> Unit,
@@ -897,6 +909,7 @@ private fun AreaHeader(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            TrendBadge(trend, MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 text = formatDate(date),
                 fontSize = 11.sp,
@@ -913,6 +926,60 @@ private fun AreaHeader(
             onDelete = onDelete,
             onMoveUp = onMoveUp,
             onMoveDown = onMoveDown,
+        )
+    }
+}
+
+/** Up / down tints for progress trends: soft, so they read on every header colour. */
+private val TrendUp = Color(0xFF81C784)
+private val TrendDown = Color(0xFFE57373)
+
+/**
+ * Six-month progress for a header: a tiny line of the progress index plus its % change. Green when
+ * up at least 1%, red when down at least 1%, the header's own muted colour in between. Nothing is
+ * drawn when the section has no recent data.
+ */
+@Composable
+private fun TrendBadge(trend: Trend?, neutral: Color) {
+    if (trend == null || trend.points.size < 2) return
+    val pct = trend.changePct
+    val color = when {
+        pct >= 1f -> TrendUp
+        pct <= -1f -> TrendDown
+        else -> neutral.copy(alpha = 0.6f)
+    }
+    val rounded = Math.round(pct)
+    val label = when {
+        rounded > 0 -> "+$rounded%"
+        rounded < 0 -> "\u2212${-rounded}%"
+        else -> "0%"
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(end = 8.dp),
+    ) {
+        Canvas(modifier = Modifier.width(34.dp).height(12.dp)) {
+            val pts = trend.points
+            val lo = pts.min()
+            val hi = pts.max()
+            val span = hi - lo
+            val stroke = 1.4.dp.toPx()
+            val h = size.height - stroke
+            val path = Path()
+            pts.forEachIndexed { i, v ->
+                val x = size.width * i / (pts.size - 1)
+                // A flat line sits in the middle instead of being stretched into noise.
+                val y = if (span < 0.5f) size.height / 2 else stroke / 2 + h * (1f - (v - lo) / span)
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(path, color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            color = color,
+            maxLines = 1,
+            modifier = Modifier.padding(start = 4.dp).width(30.dp),
         )
     }
 }

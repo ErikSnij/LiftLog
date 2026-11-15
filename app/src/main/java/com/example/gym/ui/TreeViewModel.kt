@@ -13,9 +13,11 @@ import com.example.gym.data.LiftLogDao
 import com.example.gym.data.WeightConfig
 import com.example.gym.data.WeightMode
 import com.example.gym.data.weightConfig
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -173,6 +175,27 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
             loaded = true,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TreeUi())
+
+    // ---- Progress index (trend lines on the tree headers) -------------------
+
+    /**
+     * Six-month progress trend for every category, muscle group and area (see
+     * computeProgressTrends). Recomputed off the main thread whenever an entry or body weight
+     * changes; cheap at personal-log sizes (a few thousand entries).
+     */
+    val progress: StateFlow<ProgressTrends> = combine(
+        dao.observeProgressRows(),
+        dao.observeBodyWeightHistory(),
+    ) { rows, bodyWeights ->
+        computeProgressTrends(
+            entries = rows.map {
+                ProgressEntry(it.date, it.reps, it.weight, it.extraKg, it.exerciseId, it.areaId, it.muscleGroupId, it.categoryId)
+            },
+            bodyWeights = bodyWeights.map { it.date to it.weight },
+            today = LocalDate.now(),
+        )
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProgressTrends())
 
     // ---- UI state: show-archived (survives recomposition) ----
 
