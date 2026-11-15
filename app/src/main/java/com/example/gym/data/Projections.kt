@@ -11,6 +11,18 @@ data class LatestEntry(
     val date: LocalDate,
 )
 
+/** One log entry with every tree level above it, for the progress index (see computeProgressTrends). */
+data class ProgressRow(
+    val date: LocalDate,
+    val reps: Float?,
+    val weight: Float?,
+    val extraKg: Float?,
+    val exerciseId: Long,
+    val areaId: Long,
+    val muscleGroupId: Long,
+    val categoryId: Long,
+)
+
 /** Derived (never stored) last-performed date for a parent, keyed by that parent's id. */
 data class LastPerformed(
     val parentId: Long,

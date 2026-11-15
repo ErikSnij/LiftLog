@@ -241,6 +241,23 @@ interface LiftLogDao {
     @Query("UPDATE exercise SET addOnWeight = :enabled WHERE id = :exerciseId")
     suspend fun setAddOnWeight(exerciseId: Long, enabled: Boolean)
 
+    /**
+     * Every log entry with the exercise / area / muscle group / category it belongs to, for the
+     * progress index. Archived exercises are included: their history still counts.
+     */
+    @Query(
+        """
+        SELECT le.date AS date, le.reps AS reps, le.weight AS weight, le.extraKg AS extraKg,
+               e.id AS exerciseId, a.id AS areaId, mg.id AS muscleGroupId, mg.categoryId AS categoryId
+        FROM log_entry le
+        JOIN set_row sr ON sr.id = le.setRowId
+        JOIN exercise e ON e.id = sr.exerciseId
+        JOIN area a ON a.id = e.areaId
+        JOIN muscle_group mg ON mg.id = a.muscleGroupId
+        """
+    )
+    fun observeProgressRows(): Flow<List<ProgressRow>>
+
     // ---- Body weight -------------------------------------------------------
 
     @Query("SELECT * FROM body_weight ORDER BY date DESC")
