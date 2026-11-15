@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.gym.ui.BodyWeightScreen
 import com.example.gym.ui.HistoryScreen
+import com.example.gym.ui.ProgressScreen
 import com.example.gym.ui.SettingsScreen
 import com.example.gym.ui.TreeScreen
 import com.example.gym.ui.theme.GymTheme
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
                 var historyId by rememberSaveable { mutableStateOf(-1L) }
                 var showBodyWeight by rememberSaveable { mutableStateOf(false) }
                 var showSettings by rememberSaveable { mutableStateOf(false) }
+                var showProgress by rememberSaveable { mutableStateOf(false) }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     when {
                         showSettings -> {
@@ -52,11 +54,21 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.padding(innerPadding),
                             )
                         }
+                        // Below History, so an exercise's history opened from Progress returns here.
+                        // Progress handles Back itself: it zooms out before it closes.
+                        showProgress -> {
+                            ProgressScreen(
+                                onBack = { showProgress = false },
+                                onOpenHistory = { historyId = it },
+                                modifier = Modifier.padding(innerPadding),
+                            )
+                        }
                         else -> {
                             TreeScreen(
                                 onOpenHistory = { historyId = it },
                                 onOpenBodyWeight = { showBodyWeight = true },
                                 onOpenSettings = { showSettings = true },
+                                onOpenProgress = { showProgress = true },
                                 modifier = Modifier.padding(innerPadding),
                             )
                         }

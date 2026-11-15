@@ -118,4 +118,47 @@ class ProgressIndexTest {
         val t = computeProgressTrends(entries, emptyList(), today(1))
         assertTrue(t.areas.getValue(1).changePct > 19.9f)
     }
+
+    @Test
+    fun exercisesHaveTheirOwnTrend() {
+        val h = buildProgressHistory(
+            listOf(set(0, 100f, 1), set(1, 120f, 1), set(0, 50f, 2), set(1, 50f, 2)),
+            emptyList(),
+            today(1),
+        )!!
+        assertEquals(20f, h.trend(ProgressNode(ProgressLevel.EXERCISE, 1), null)!!.changePct, 0.01f)
+        assertEquals(0f, h.trend(ProgressNode(ProgressLevel.EXERCISE, 2), null)!!.changePct, 0.01f)
+    }
+
+    @Test
+    fun allRangeStartsAtTheFirstLoggedWeek() {
+        val h = buildProgressHistory(listOf(set(0, 100f, 1), set(30, 130f, 1)), emptyList(), today(40), staleWeeks = 52)!!
+        val all = h.trend(ProgressNode.OVERALL, null)!!
+        assertEquals(monday, all.startWeek)
+        assertEquals(41, all.points.size)
+        assertEquals(30f, all.changePct, 0.01f)
+        // The same history cut to 4 weeks starts 4 weeks before today, flat.
+        val recent = h.trend(ProgressNode.OVERALL, 4)!!
+        assertEquals(monday.plusWeeks(37), recent.startWeek)
+        assertEquals(0f, recent.changePct, 0.01f)
+    }
+
+    @Test
+    fun lastLoggedRollsUpToEveryAncestor() {
+        val h = buildProgressHistory(
+            listOf(set(0, 100f, 1, area = 1, group = 1, category = 1), set(3, 100f, 2, area = 2, group = 1, category = 1)),
+            emptyList(),
+            today(5),
+        )!!
+        assertEquals(monday, h.lastLogged[ProgressNode(ProgressLevel.AREA, 1)])
+        assertEquals(monday.plusWeeks(3), h.lastLogged[ProgressNode(ProgressLevel.MUSCLE_GROUP, 1)])
+        assertEquals(monday.plusWeeks(3), h.lastLogged[ProgressNode.OVERALL])
+    }
+
+    @Test
+    fun nothingUsableMeansNoHistory() {
+        // Reps unknown: no e1RM can be estimated.
+        val h = buildProgressHistory(listOf(ProgressEntry(monday, null, 100f, null, 1, 1, 1, 1)), emptyList(), today(1))
+        assertNull(h)
+    }
 }

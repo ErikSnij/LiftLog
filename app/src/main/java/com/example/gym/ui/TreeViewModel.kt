@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -176,26 +177,67 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TreeUi())
 
-    // ---- Progress index (trend lines on the tree headers) -------------------
+    // ---- Progress index (tree header trends + the Progress screen) -----------
 
     /**
-     * Six-month progress trend for every category, muscle group and area (see
-     * computeProgressTrends). Recomputed off the main thread whenever an entry or body weight
-     * changes; cheap at personal-log sizes (a few thousand entries).
+     * The progress index for every node of the tree over its whole history (see
+     * buildProgressHistory); null while loading, ProgressHistory.EMPTY when nothing usable is
+     * logged. Recomputed off the main thread whenever an entry or body weight changes; cheap at
+     * personal-log sizes.
      */
-    val progress: StateFlow<ProgressTrends> = combine(
+    val progressHistory: StateFlow<ProgressHistory?> = combine(
         dao.observeProgressRows(),
         dao.observeBodyWeightHistory(),
     ) { rows, bodyWeights ->
-        computeProgressTrends(
+        buildProgressHistory(
             entries = rows.map {
                 ProgressEntry(it.date, it.reps, it.weight, it.extraKg, it.exerciseId, it.areaId, it.muscleGroupId, it.categoryId)
             },
             bodyWeights = bodyWeights.map { it.date to it.weight },
             today = LocalDate.now(),
-        )
+        ) ?: ProgressHistory.EMPTY
     }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Six-month trend for every category, muscle group and area header. */
+    val progress: StateFlow<ProgressTrends> = progressHistory
+        .map { it?.headerTrends(26) ?: ProgressTrends() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProgressTrends())
+
+    /**
+     * Where the Progress screen is: the nodes drilled through, current last. Back pops one; a
+     * breadcrumb tap jumps to an ancestor. Kept here so it survives a trip into History and back.
+     */
+    var progressStack by mutableStateOf(listOf(ProgressNode.OVERALL))
+        private set
+    var progressRange by mutableStateOf(ProgressRange.SIX_MONTHS)
+        private set
+
+    /** Opens the Progress screen fresh at [node] (Overall from the top bar, a section from its header). */
+    fun openProgress(node: ProgressNode) {
+        progressStack = listOf(node)
+    }
+
+    fun progressPush(node: ProgressNode) {
+        if (progressStack.last() != node) progressStack = progressStack + node
+    }
+
+    /** Breadcrumb: back to [node] if it's on the way here, otherwise start from it. */
+    fun progressGoTo(node: ProgressNode) {
+        val i = progressStack.indexOf(node)
+        progressStack = if (i >= 0) progressStack.take(i + 1) else listOf(node)
+    }
+
+    /** One step back; false when already at the screen's starting node (so the screen closes). */
+    fun progressBack(): Boolean {
+        if (progressStack.size <= 1) return false
+        progressStack = progressStack.dropLast(1)
+        return true
+    }
+
+    fun updateProgressRange(range: ProgressRange) {
+        progressRange = range
+    }
 
     // ---- UI state: show-archived (survives recomposition) ----
 
