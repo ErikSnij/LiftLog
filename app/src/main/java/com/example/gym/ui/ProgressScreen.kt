@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -100,6 +101,29 @@ internal fun trendColor(pct: Float, neutral: Color = MaterialTheme.colorScheme.p
         else -> neutral
     }
 }
+
+/**
+ * Colours for the children's lines in the chart, chosen to stay clear of the red/green used for
+ * direction. A child keeps its colour (by its place in the tree) whatever the range.
+ */
+@Composable
+private fun seriesPalette(): List<Color> {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    return if (dark) {
+        listOf(
+            Color(0xFF64B5F6), Color(0xFFFFB74D), Color(0xFFBA68C8), Color(0xFF4DD0E1),
+            Color(0xFFFFF176), Color(0xFF9FA8DA), Color(0xFFF48FB1), Color(0xFFBCAAA4),
+        )
+    } else {
+        listOf(
+            Color(0xFF1E88E5), Color(0xFFEF6C00), Color(0xFF8E24AA), Color(0xFF00838F),
+            Color(0xFFF9A825), Color(0xFF3949AB), Color(0xFFD81B60), Color(0xFF6D4C41),
+        )
+    }
+}
+
+/** A child's line drawn inside its parent's chart. */
+private class ChartSeries(val node: ProgressNode, val name: String, val points: List<Float>, val color: Color)
 
 /** "+8%" / "−3%" / "0%" (or one decimal: "+8.4%"). Always a dot decimal, like the rest of the app. */
 internal fun signedPct(pct: Float, decimals: Int = 0): String {
@@ -356,6 +380,21 @@ private fun NodePage(
     var scrubIndex by remember(node, range) { mutableStateOf<Int?>(null) }
     val haptics = LocalHapticFeedback.current
 
+    // Each child's line in the chart, coloured by its place in the tree; a tapped legend chip
+    // spotlights one of them.
+    val palette = seriesPalette()
+    val seriesColors = remember(info, palette) {
+        info?.children.orEmpty().mapIndexed { i, c -> c to palette[i % palette.size] }.toMap()
+    }
+    val overlays = remember(active, seriesColors) {
+        active.mapNotNull { row ->
+            val t = row.trend ?: return@mapNotNull null
+            ChartSeries(row.node, row.name, t.points, seriesColors[row.node] ?: return@mapNotNull null)
+        }
+    }
+    var focusedChild by remember(node) { mutableStateOf<ProgressNode?>(null) }
+    val focus = focusedChild?.takeIf { f -> overlays.any { it.node == f } }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -407,7 +446,12 @@ private fun NodePage(
                 if (trend != null) {
                     ProgressChart(
                         trend = trend,
-                        color = trendColor(trend.changePct),
+                        fillColor = trendColor(trend.changePct),
+                        // With children drawn in, the total is a bold neutral line; alone, it
+                        // carries the direction colour itself.
+                        lineColor = if (overlays.isEmpty()) trendColor(trend.changePct) else MaterialTheme.colorScheme.onSurface,
+                        overlays = overlays,
+                        focus = focus,
                         scrubIndex = scrubIndex,
                         onScrub = { i ->
                             if (i != null && i != scrubIndex) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -425,6 +469,15 @@ private fun NodePage(
                         )
                     }
                 }
+                if (trend != null && overlays.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    ChartLegend(
+                        series = overlays,
+                        scrubIndex = scrubIndex,
+                        focus = focus,
+                        onToggle = { n -> focusedChild = if (focus == n) null else n },
+                    )
+                }
                 Spacer(Modifier.height(10.dp))
                 RangeSelector(range, onRange, Modifier.padding(horizontal = 12.dp))
             }
@@ -433,7 +486,7 @@ private fun NodePage(
         if (node.level == ProgressLevel.EXERCISE) {
             RecentSets(exerciseId = node.id, onOpenHistory = { onOpenHistory(node.id) })
         } else {
-            BreakdownSections(node, exercises, active, inactive, today, onOpen)
+            BreakdownSections(node, exercises, active, inactive, seriesColors, today, onOpen)
         }
     }
 }
@@ -445,6 +498,7 @@ private fun BreakdownSections(
     exercises: List<ChildRow>,
     active: List<ChildRow>,
     inactive: List<ChildRow>,
+    seriesColors: Map<ProgressNode, Color>,
     today: LocalDate,
     onOpen: (ProgressNode) -> Unit,
 ) {
@@ -482,7 +536,7 @@ private fun BreakdownSections(
             CardList {
                 active.forEachIndexed { i, row ->
                     if (i > 0) RowDivider()
-                    ChildTrendRow(row, today) { onOpen(row.node) }
+                    ChildTrendRow(row, today, seriesColors[row.node]) { onOpen(row.node) }
                 }
             }
         }
@@ -491,7 +545,7 @@ private fun BreakdownSections(
             CardList {
                 inactive.forEachIndexed { i, row ->
                     if (i > 0) RowDivider()
-                    ChildTrendRow(row, today) { onOpen(row.node) }
+                    ChildTrendRow(row, today, seriesColor = null) { onOpen(row.node) }
                 }
             }
         }
@@ -567,7 +621,7 @@ private fun RangeSelector(range: ProgressRange, onRange: (ProgressRange) -> Unit
 }
 
 @Composable
-private fun ChildTrendRow(row: ChildRow, today: LocalDate, onClick: () -> Unit) {
+private fun ChildTrendRow(row: ChildRow, today: LocalDate, seriesColor: Color?, onClick: () -> Unit) {
     val t = row.trend
     val muted = t == null
     Row(
@@ -577,6 +631,11 @@ private fun ChildTrendRow(row: ChildRow, today: LocalDate, onClick: () -> Unit) 
             .padding(start = 16.dp, end = 10.dp, top = 11.dp, bottom = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (seriesColor != null && t != null) {
+            // Matches this child's line in the chart above.
+            Box(Modifier.size(9.dp).clip(CircleShape).background(seriesColor))
+            Spacer(Modifier.width(10.dp))
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 row.name,
@@ -601,7 +660,7 @@ private fun ChildTrendRow(row: ChildRow, today: LocalDate, onClick: () -> Unit) 
         }
         if (t != null) {
             val color = trendColor(t.changePct, MaterialTheme.colorScheme.onSurfaceVariant)
-            Sparkline(t.points, color, Modifier.size(width = 56.dp, height = 22.dp))
+            Sparkline(t.points, seriesColor ?: color, Modifier.size(width = 56.dp, height = 22.dp))
             Spacer(Modifier.width(10.dp))
             ChangePill(t.changePct, color)
         }
@@ -726,6 +785,70 @@ private fun Sparkline(points: List<Float>, color: Color, modifier: Modifier) {
     }
 }
 
+/**
+ * One chip per child line: its colour, name and % change — at the scrubbed week while scrubbing,
+ * so you can read who moved the total that week. Tap a chip to spotlight its line; tap it again
+ * to show them all.
+ */
+@Composable
+private fun ChartLegend(
+    series: List<ChartSeries>,
+    scrubIndex: Int?,
+    focus: ProgressNode?,
+    onToggle: (ProgressNode) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        for (s in series) key(s.node) {
+            val pct = (scrubIndex?.let { s.points.getOrNull(it) } ?: s.points.last()) - 100f
+            val selected = focus == s.node
+            val dimmed = focus != null && !selected
+            val bg by animateColorAsState(
+                if (selected) s.color.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                tween(200),
+                label = "legend-bg",
+            )
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(bg)
+                    .clickable { onToggle(s.node) }
+                    .padding(start = 9.dp, end = 11.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(s.color.copy(alpha = if (dimmed) 0.35f else 1f)),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    s.name,
+                    fontSize = 12.5.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (dimmed) 0.5f else 1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 120.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    signedPct(pct),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = trendColor(pct, MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = if (dimmed) 0.5f else 1f),
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
 // ---- The main chart -------------------------------------------------------------------------
 
 /** A tidy gridline step for a span of [range] percentage points (aiming for about three lines). */
@@ -736,13 +859,18 @@ private fun niceStep(range: Float): Float {
 
 /**
  * The node's index as % change since the window's start: a smooth line over a soft gradient,
- * gridlines labelled in %, a dashed 0% baseline and calendar ticks underneath. Drag across it to
- * scrub (the hero number follows), or tap to pin a week; tap the same week again to clear it.
+ * gridlines labelled in %, a dashed 0% baseline and calendar ticks underneath. Each child's own
+ * line ([overlays]) is drawn thin behind it, so you can see which one moved the total; [focus]
+ * spotlights one and fades the rest. Drag across it to scrub (the hero number follows), or tap to
+ * pin a week; tap the same week again to clear it.
  */
 @Composable
 private fun ProgressChart(
     trend: Trend,
-    color: Color,
+    fillColor: Color,
+    lineColor: Color,
+    overlays: List<ChartSeries>,
+    focus: ProgressNode?,
     scrubIndex: Int?,
     onScrub: (Int?) -> Unit,
     modifier: Modifier = Modifier,
@@ -763,10 +891,12 @@ private fun ProgressChart(
     val currentScrub by rememberUpdatedState(scrubIndex)
     val currentOnScrub by rememberUpdatedState(onScrub)
 
-    // Y range in % change, always including 0 and at least ±2 points tall, snapped to gridlines.
+    // Y range in % change over the total and every child line, always including 0 and at least
+    // ±2 points tall, snapped to gridlines.
     val pcts = points.map { it - 100f }
-    val rawLo = minOf(0f, pcts.min())
-    val rawHi = maxOf(0f, pcts.max())
+    val overlayPcts = overlays.map { o -> o.points.map { it - 100f } }
+    val rawLo = minOf(0f, pcts.min(), overlayPcts.minOfOrNull { it.min() } ?: 0f)
+    val rawHi = maxOf(0f, pcts.max(), overlayPcts.maxOfOrNull { it.max() } ?: 0f)
     val mid = (rawLo + rawHi) / 2
     val half = maxOf((rawHi - rawLo) / 2, 2f)
     val step = niceStep(half * 2)
@@ -850,28 +980,49 @@ private fun ProgressChart(
         }
 
         // The line: smooth (horizontal tangents, so it never overshoots a real value) over a fade.
-        fun Path.traceLine() {
-            for (i in 0 until n) {
+        fun Path.traceLine(values: List<Float>) {
+            val count = minOf(n, values.size)
+            for (i in 0 until count) {
                 val x = xOf(i)
-                val y = yOf(pcts[i])
+                val y = yOf(values[i])
                 if (i == 0) moveTo(x, y) else {
                     val px = xOf(i - 1)
-                    val py = yOf(pcts[i - 1])
+                    val py = yOf(values[i - 1])
                     val cx = (px + x) / 2
                     cubicTo(cx, py, cx, y, x, y)
                 }
             }
         }
-        val line = Path().apply { traceLine() }
+        val line = Path().apply { traceLine(pcts) }
         val fill = Path().apply {
-            traceLine()
+            traceLine(pcts)
             lineTo(xOf(n - 1), bottom)
             lineTo(xOf(0), bottom)
             close()
         }
         clipRect(left = left - 4.dp.toPx(), right = left + (w + 8.dp.toPx()) * reveal.value) {
-            drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.30f), color.copy(alpha = 0f)), startY = top, endY = bottom))
-            drawPath(line, color, style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(fill, Brush.verticalGradient(listOf(fillColor.copy(alpha = 0.26f), fillColor.copy(alpha = 0f)), startY = top, endY = bottom))
+            // Children first (thin), the spotlit one last so it sits on top of its siblings.
+            val order = overlays.indices.sortedBy { overlays[it].node == focus }
+            for (k in order) {
+                val o = overlays[k]
+                val spot = o.node == focus
+                val alpha = when {
+                    focus == null -> 0.85f
+                    spot -> 1f
+                    else -> 0.14f
+                }
+                drawPath(
+                    Path().apply { traceLine(overlayPcts[k]) },
+                    o.color.copy(alpha = alpha),
+                    style = Stroke(width = (if (spot) 2.4 else 1.5).dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                )
+            }
+            drawPath(
+                line,
+                lineColor.copy(alpha = if (focus != null) 0.55f else 1f),
+                style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+            )
         }
 
         val s = scrubIndex
@@ -880,15 +1031,23 @@ private fun ProgressChart(
             val x = xOf(s)
             val y = yOf(pcts[s])
             drawLine(guideColor.copy(alpha = 0.35f), Offset(x, top), Offset(x, bottom), 1.dp.toPx())
-            drawCircle(color.copy(alpha = 0.22f), radius = 10.dp.toPx(), center = Offset(x, y))
+            val spotIndex = overlays.indexOfFirst { it.node == focus }
+            if (spotIndex >= 0) {
+                overlayPcts[spotIndex].getOrNull(s)?.let { v ->
+                    val oy = yOf(v)
+                    drawCircle(backgroundColor, radius = 4.5.dp.toPx(), center = Offset(x, oy))
+                    drawCircle(overlays[spotIndex].color, radius = 3.2.dp.toPx(), center = Offset(x, oy))
+                }
+            }
+            drawCircle(lineColor.copy(alpha = 0.22f), radius = 10.dp.toPx(), center = Offset(x, y))
             drawCircle(backgroundColor, radius = 5.5.dp.toPx(), center = Offset(x, y))
-            drawCircle(color, radius = 4.dp.toPx(), center = Offset(x, y))
+            drawCircle(lineColor, radius = 4.dp.toPx(), center = Offset(x, y))
         } else if (reveal.value >= 0.999f) {
             // Resting state: mark where it is now.
             val x = xOf(n - 1)
             val y = yOf(pcts[n - 1])
             drawCircle(backgroundColor, radius = 5.dp.toPx(), center = Offset(x, y))
-            drawCircle(color, radius = 3.5.dp.toPx(), center = Offset(x, y))
+            drawCircle(lineColor, radius = 3.5.dp.toPx(), center = Offset(x, y))
         }
     }
 }
