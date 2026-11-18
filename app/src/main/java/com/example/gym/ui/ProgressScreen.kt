@@ -559,7 +559,7 @@ private fun BreakdownSections(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(
         text = text.uppercase(),
         fontSize = 11.sp,
@@ -591,6 +591,22 @@ private fun RowDivider() {
 
 @Composable
 private fun RangeSelector(range: ProgressRange, onRange: (ProgressRange) -> Unit, modifier: Modifier = Modifier) {
+    SegmentedSelector(
+        labels = ProgressRange.entries.map { it.label },
+        selectedIndex = range.ordinal,
+        onSelect = { onRange(ProgressRange.entries[it]) },
+        modifier = modifier,
+    )
+}
+
+/** A full-width segmented control: one pill per option, the chosen one raised. Shared with History. */
+@Composable
+internal fun SegmentedSelector(
+    labels: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -599,27 +615,28 @@ private fun RangeSelector(range: ProgressRange, onRange: (ProgressRange) -> Unit
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        for (r in ProgressRange.entries) {
-            val selected = r == range
+        labels.forEachIndexed { i, label ->
+            val selected = i == selectedIndex
             val bg by animateColorAsState(
                 if (selected) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent,
                 tween(200),
-                label = "range-bg",
+                label = "segment-bg",
             )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(11.dp))
                     .background(bg)
-                    .clickable { onRange(r) }
+                    .clickable { onSelect(i) }
                     .padding(vertical = 7.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    r.label,
+                    label,
                     fontSize = 13.sp,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                     color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                 )
             }
         }
@@ -668,14 +685,14 @@ private fun ChildTrendRow(row: ChildRow, today: LocalDate, seriesColor: Color?, 
             val color = trendColor(t.changePct, MaterialTheme.colorScheme.onSurfaceVariant)
             Sparkline(t.points, seriesColor ?: color, Modifier.size(width = 56.dp, height = 22.dp))
             Spacer(Modifier.width(10.dp))
-            ChangePill(t.changePct, color)
+            ChangePill(signedPct(t.changePct), color)
         }
         Chevron()
     }
 }
 
 @Composable
-private fun ChangePill(pct: Float, color: Color) {
+internal fun ChangePill(text: String, color: Color) {
     Box(
         modifier = Modifier
             .widthIn(min = 54.dp)
@@ -684,7 +701,7 @@ private fun ChangePill(pct: Float, color: Color) {
             .padding(horizontal = 8.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(signedPct(pct), fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = color, maxLines = 1)
+        Text(text, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = color, maxLines = 1)
     }
 }
 
@@ -983,6 +1000,8 @@ private fun ProgressChart(
         else listOf(trend.startWeek to formatMonthDay(trend.startWeek), endWeek to formatMonthDay(endWeek))
         for ((date, label) in labelled) {
             val x = left + w * ChronoUnit.DAYS.between(trend.startWeek, date) / totalDays
+            // A faint vertical line per calendar tick, as on the History chart.
+            if (ticks.isNotEmpty()) drawLine(gridColor.copy(alpha = 0.18f), Offset(x, top), Offset(x, bottom), 1.dp.toPx())
             val halfWidth = tickPaint.measureText(label) / 2
             drawIntoCanvas { it.nativeCanvas.drawText(label, x.coerceIn(left + halfWidth, right - halfWidth), dateY, tickPaint) }
         }
