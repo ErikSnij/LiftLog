@@ -393,6 +393,10 @@ private fun NodePage(
         }
     }
     var focusedChild by remember(node) { mutableStateOf<ProgressNode?>(null) }
+    // Exercise level: which points of the line are real sessions (the rest is filled in between).
+    val sessions = remember(history, node, range) {
+        if (node.level == ProgressLevel.EXERCISE) history.sessionPoints(node, range.weeks) else emptyList()
+    }
     val focus = focusedChild?.takeIf { f -> overlays.any { it.node == f } }
 
     Column(
@@ -430,7 +434,8 @@ private fun NodePage(
             val caption = when {
                 trend == null -> "Not trained in this period"
                 scrubIndex != null -> "Week of ${formatDate(trend.startWeek.plusWeeks(scrubIndex!!.toLong()))}"
-                node.level == ProgressLevel.EXERCISE -> "${range.caption} · estimated 1RM"
+                node.level == ProgressLevel.EXERCISE ->
+                    "${range.caption} · ${sessions.size} session${if (sessions.size == 1) "" else "s"} · estimated 1RM"
                 else -> "${range.caption} · $activeExerciseCount exercise${if (activeExerciseCount == 1) "" else "s"}"
             }
             Text(caption, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -452,6 +457,7 @@ private fun NodePage(
                         lineColor = if (overlays.isEmpty()) trendColor(trend.changePct) else MaterialTheme.colorScheme.onSurface,
                         overlays = overlays,
                         focus = focus,
+                        sessionMarks = sessions,
                         scrubIndex = scrubIndex,
                         onScrub = { i ->
                             if (i != null && i != scrubIndex) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -861,8 +867,9 @@ private fun niceStep(range: Float): Float {
  * The node's index as % change since the window's start: a smooth line over a soft gradient,
  * gridlines labelled in %, a dashed 0% baseline and calendar ticks underneath. Each child's own
  * line ([overlays]) is drawn thin behind it, so you can see which one moved the total; [focus]
- * spotlights one and fades the rest. Drag across it to scrub (the hero number follows), or tap to
- * pin a week; tap the same week again to clear it.
+ * spotlights one and fades the rest. [sessionMarks] (exercise level) dots the weeks actually logged.
+ * Drag across it to scrub (the hero number follows), or tap to pin a week; tap the same week again
+ * to clear it.
  */
 @Composable
 private fun ProgressChart(
@@ -871,6 +878,7 @@ private fun ProgressChart(
     lineColor: Color,
     overlays: List<ChartSeries>,
     focus: ProgressNode?,
+    sessionMarks: List<Int>,
     scrubIndex: Int?,
     onScrub: (Int?) -> Unit,
     modifier: Modifier = Modifier,
@@ -1023,6 +1031,13 @@ private fun ProgressChart(
                 lineColor.copy(alpha = if (focus != null) 0.55f else 1f),
                 style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
             )
+            // Real sessions as small dots on the line; between them it's filled in.
+            for (i in sessionMarks) {
+                if (i !in 0 until n) continue
+                val c = Offset(xOf(i), yOf(pcts[i]))
+                drawCircle(backgroundColor, radius = 4.2.dp.toPx(), center = c)
+                drawCircle(lineColor, radius = 2.8.dp.toPx(), center = c)
+            }
         }
 
         val s = scrubIndex

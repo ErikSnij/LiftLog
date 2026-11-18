@@ -54,6 +54,8 @@ class ProgressHistory internal constructor(
     private val steps: Map<ProgressNode, Array<Double?>>,
     /** Per node: the latest date anything beneath it was logged. */
     val lastLogged: Map<ProgressNode, LocalDate>,
+    /** Per exercise node: the indices (into [weeks]) of the weeks it was actually logged. */
+    private val sessionWeeks: Map<ProgressNode, List<Int>> = emptyMap(),
 ) {
     /** True when nothing usable has been logged at all. */
     val isEmpty: Boolean get() = steps.isEmpty()
@@ -87,6 +89,15 @@ class ProgressHistory internal constructor(
         val EMPTY = ProgressHistory(emptyList(), emptyMap(), emptyMap())
     }
 
+    /**
+     * For an exercise: the points of its [trend] over the same window that are real sessions
+     * (as indices into Trend.points); every other point is filled in between sessions.
+     */
+    fun sessionPoints(node: ProgressNode, windowWeeks: Int?): List<Int> {
+        val start = if (windowWeeks == null) 0 else maxOf(0, weeks.size - windowWeeks)
+        return sessionWeeks[node].orEmpty().filter { it >= start }.map { it - start }
+    }
+
     /** Category / muscle group / area trends for the tree headers. */
     fun headerTrends(windowWeeks: Int): ProgressTrends {
         fun byId(level: ProgressLevel) =
@@ -112,8 +123,12 @@ class ProgressHistory internal constructor(
  * 4. The weekly changes are chained into an index. Only exercises active in both weeks of a step
  *    count towards it, so adding, dropping or swapping an exercise never makes the line jump.
  *
- * An exercise not logged in a week holds flat; after [staleWeeks] without a log it drops out of
- * the averages until it's logged again (re-entering without a step, like a brand-new one).
+ * Between two sessions of an exercise up to [maxGapWeeks] apart, its strength is taken to change
+ * evenly week by week (log-linear), so a gap of a few months still counts the progress made across
+ * it, and a window that starts mid-gap starts on that slope rather than flat. After its last
+ * session an exercise holds flat; after [staleWeeks] without a log it drops out of the averages, so
+ * an abandoned exercise doesn't drag its section towards 0%. A gap longer than [maxGapWeeks] (a
+ * long layoff, a swapped machine) isn't bridged: the exercise re-enters without a step.
  *
  * Returns null when nothing usable has been logged.
  */
@@ -122,6 +137,7 @@ fun buildProgressHistory(
     bodyWeights: List<Pair<LocalDate, Float>>,
     today: LocalDate,
     staleWeeks: Int = 8,
+    maxGapWeeks: Int = 26,
 ): ProgressHistory? {
     val sortedBw = bodyWeights.sortedBy { it.first }
     fun load(e: ProgressEntry): Float? {
@@ -149,27 +165,33 @@ fun buildProgressHistory(
     val weeks = List(weekCount) { first.plusWeeks(it.toLong()) }
     fun indexOf(d: LocalDate) = ChronoUnit.WEEKS.between(first, d).toInt()
 
-    // Per exercise: log-ratio step for each week, or null when it isn't active in both weeks.
+    // Per exercise: its log-strength for each week it's active (logged, between two sessions, or
+    // within [staleWeeks] after one), then the week-to-week steps of that.
     val exerciseSteps = HashMap<Long, Array<Double?>>()
+    val sessionWeeks = HashMap<ProgressNode, List<Int>>()
     for ((exId, byWeek) in weekly) {
-        val values = arrayOfNulls<Float>(weekCount)
-        for ((wk, v) in byWeek) values[indexOf(wk)] = v
-        val s = arrayOfNulls<Double>(weekCount)
-        var lastValue: Float? = null
-        var lastWeek = -1
-        for (i in 0 until weekCount) {
-            val v = values[i]
-            val activeBefore = lastValue != null && i - lastWeek <= staleWeeks
-            if (v != null) {
-                s[i] = if (activeBefore && i > 0) ln(v.toDouble() / lastValue!!.toDouble()) else null
-                lastValue = v
-                lastWeek = i
+        val logged = byWeek.entries.map { indexOf(it.key) to ln(it.value.toDouble()) }.sortedBy { it.first }
+        sessionWeeks[ProgressNode(ProgressLevel.EXERCISE, exId)] = logged.map { it.first }
+        val level = arrayOfNulls<Double>(weekCount)
+        for ((k, session) in logged.withIndex()) {
+            val (i, v) = session
+            level[i] = v
+            val next = logged.getOrNull(k + 1)
+            if (next != null && next.first - i <= maxGapWeeks) {
+                // Bridge the gap: even change per week up to the next session.
+                val (j, w) = next
+                for (t in i + 1 until j) level[t] = v + (w - v) * (t - i) / (j - i)
             } else {
-                // Not logged: holds flat while still fresh; drops out once stale.
-                s[i] = if (activeBefore && i > 0) 0.0 else null
+                // Last session, or a gap too long to bridge: hold flat until it goes stale.
+                val until = minOf(i + staleWeeks, (next?.first ?: weekCount) - 1)
+                for (t in i + 1..until) level[t] = v
             }
         }
-        exerciseSteps[exId] = s
+        exerciseSteps[exId] = Array(weekCount) { t ->
+            val cur = level[t]
+            val prev = if (t > 0) level[t - 1] else null
+            if (cur != null && prev != null) cur - prev else null
+        }
     }
 
     // Tree shape, taken from the entries themselves (only nodes that have data), and the latest
@@ -216,7 +238,7 @@ fun buildProgressHistory(
     categorySteps.forEach { (id, s) -> all[ProgressNode(ProgressLevel.CATEGORY, id)] = s }
     all[ProgressNode.OVERALL] = average(categorySteps.values)
 
-    return ProgressHistory(weeks, all, lastLogged)
+    return ProgressHistory(weeks, all, lastLogged, sessionWeeks)
 }
 
 /** Header trends over the last [windowWeeks] weeks; see [buildProgressHistory]. */
@@ -226,7 +248,8 @@ fun computeProgressTrends(
     today: LocalDate,
     windowWeeks: Int = 26,
     staleWeeks: Int = 8,
+    maxGapWeeks: Int = 26,
 ): ProgressTrends =
-    buildProgressHistory(entries, bodyWeights, today, staleWeeks)?.headerTrends(windowWeeks) ?: ProgressTrends()
+    buildProgressHistory(entries, bodyWeights, today, staleWeeks, maxGapWeeks)?.headerTrends(windowWeeks) ?: ProgressTrends()
 
 private fun weekStart(d: LocalDate): LocalDate = d.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
