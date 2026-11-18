@@ -801,7 +801,7 @@ private fun HighlightGlyph(kind: HighlightKind, color: Color, modifier: Modifier
 
 /** Tiny line for list rows: shape only, no axes. */
 @Composable
-private fun Sparkline(points: List<Float>, color: Color, modifier: Modifier) {
+internal fun Sparkline(points: List<Float>, color: Color, modifier: Modifier) {
     Canvas(modifier) {
         if (points.size < 2) return@Canvas
         val lo = points.min()

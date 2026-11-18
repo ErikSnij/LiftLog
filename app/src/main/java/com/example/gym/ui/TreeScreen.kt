@@ -318,6 +318,7 @@ fun TreeScreen(
                             CategoryHeader(
                                 modifier = Modifier.onGloballyPositioned { catHeightPx = it.size.height },
                                 name = category.name,
+                                date = category.lastPerformed,
                                 trend = progress.categories[category.id],
                                 onOpenProgress = { openProgress(ProgressNode(ProgressLevel.CATEGORY, category.id)) },
                                 onAddMuscleGroup = { vm.promptAddMuscleGroup(category.id) },
@@ -420,6 +421,7 @@ fun TreeScreen(
                                             },
                                             onNoteDelete = { vm.deleteNote(row.id, row.note) },
                                             onLongPress = { vm.openMenu(row.id) },
+                                            trend = if (index == 0) progress.exercises[exercise.id] else null,
                                         )
                                         RowMenu(
                                             expanded = vm.menuForSetRow == row.id,
@@ -525,6 +527,7 @@ fun TreeScreen(
                             ) {
                                 CategoryHeader(
                                     name = pinnedCategory.name,
+                                    date = pinnedCategory.lastPerformed,
                                     trend = progress.categories[pinnedCategory.id],
                                     onOpenProgress = { openProgress(ProgressNode(ProgressLevel.CATEGORY, pinnedCategory.id)) },
                                     onAddMuscleGroup = { vm.promptAddMuscleGroup(pinnedCategory.id) },
@@ -674,6 +677,7 @@ private fun buildPinnedIdsMap(
 @Composable
 private fun CategoryHeader(
     name: String,
+    date: LocalDate?,
     trend: Trend?,
     onOpenProgress: () -> Unit,
     onAddMuscleGroup: () -> Unit,
@@ -693,7 +697,8 @@ private fun CategoryHeader(
                 modifier = Modifier
                     .fillMaxWidth()
                     .combinedClickable(onClick = {}, onLongClick = onLongPress)
-                    .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                    .heightIn(min = HEADER_MIN_HEIGHT_CATEGORY)
+                    .padding(start = 12.dp, end = HEADER_END_PADDING, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -701,14 +706,18 @@ private fun CategoryHeader(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 TrendBadge(trend, MaterialTheme.colorScheme.onPrimaryContainer, onOpenProgress)
-                AddButton(tint = MaterialTheme.colorScheme.onPrimaryContainer, onClick = onAddMuscleGroup)
+                HeaderDate(date, MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
             }
             HeaderMenu(
                 expanded = menuExpanded,
                 onDismiss = onDismissMenu,
+                addLabel = "Add muscle group",
+                onAdd = onAddMuscleGroup,
                 renameLabel = "Rename category",
                 deleteLabel = "Delete category",
                 onRename = onRename,
@@ -749,7 +758,8 @@ private fun MuscleGroupHeader(
                 // underneath must not show through.
                 .background(MaterialTheme.colorScheme.secondaryContainer)
                 .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
-                .padding(start = 16.dp, end = 4.dp, top = 5.dp, bottom = 5.dp),
+                .heightIn(min = HEADER_MIN_HEIGHT_GROUP)
+                .padding(start = 16.dp, end = HEADER_END_PADDING, top = 5.dp, bottom = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -768,16 +778,13 @@ private fun MuscleGroupHeader(
                 modifier = Modifier.weight(1f),
             )
             TrendBadge(trend, MaterialTheme.colorScheme.onSecondaryContainer, onOpenProgress)
-            Text(
-                text = formatDate(date),
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
-            )
-            AddButton(tint = MaterialTheme.colorScheme.onSecondaryContainer, onClick = onAddArea)
+            HeaderDate(date, MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f))
         }
         HeaderMenu(
             expanded = menuExpanded,
             onDismiss = onDismissMenu,
+            addLabel = "Add muscle",
+            onAdd = onAddArea,
             renameLabel = "Rename muscle group",
             deleteLabel = "Delete muscle group",
             onRename = onRename,
@@ -794,6 +801,8 @@ private fun MuscleGroupHeader(
 private fun HeaderMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
+    addLabel: String,
+    onAdd: () -> Unit,
     renameLabel: String,
     deleteLabel: String,
     onRename: () -> Unit,
@@ -803,7 +812,10 @@ private fun HeaderMenu(
     onCollapseAllAreas: (() -> Unit)? = null,
 ) {
     ContextMenu(expanded, onDismiss) {
-        // Ordering/layout actions first, then rename, then the destructive one on its own.
+        // Adding a child comes first (it's the most used), then ordering/layout actions, then
+        // rename, then the destructive one on its own.
+        MenuAction(addLabel, { onDismiss(); onAdd() })
+        MenuDivider()
         onMoveUp?.let { action -> MenuAction("Move up", { onDismiss(); action() }) }
         onMoveDown?.let { action -> MenuAction("Move down", { onDismiss(); action() }) }
         onCollapseAllAreas?.let { action ->
@@ -867,20 +879,6 @@ private fun MenuDivider() {
     )
 }
 
-/** A small "+" affordance used on headers to add a child (area / exercise / category). */
-@Composable
-private fun AddButton(tint: Color, onClick: () -> Unit) {
-    Text(
-        text = "+",
-        fontSize = 20.sp,
-        fontWeight = FontWeight.Bold,
-        color = tint.copy(alpha = 0.8f),
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 1.dp),
-    )
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AreaHeader(
@@ -908,7 +906,8 @@ private fun AreaHeader(
                 // underneath must not show through.
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
-                .padding(start = 22.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                .heightIn(min = HEADER_MIN_HEIGHT_AREA)
+                .padding(start = 22.dp, end = HEADER_END_PADDING, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -927,16 +926,13 @@ private fun AreaHeader(
                 modifier = Modifier.weight(1f),
             )
             TrendBadge(trend, MaterialTheme.colorScheme.onSurfaceVariant, onOpenProgress)
-            Text(
-                text = formatDate(date),
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            AddButton(tint = MaterialTheme.colorScheme.primary, onClick = onAddExercise)
+            HeaderDate(date, MaterialTheme.colorScheme.onSurfaceVariant)
         }
         HeaderMenu(
             expanded = menuExpanded,
             onDismiss = onDismissMenu,
+            addLabel = "Add exercise",
+            onAdd = onAddExercise,
             renameLabel = "Rename muscle",
             deleteLabel = "Delete muscle",
             onRename = onRename,
@@ -947,10 +943,21 @@ private fun AreaHeader(
     }
 }
 
+// Header layout shared by the three levels, so the trend and date columns line up from the
+// category down to the exercise rows (whose date also ends 12dp from the edge).
+private val HEADER_END_PADDING = 12.dp
+private val HEADER_MIN_HEIGHT_CATEGORY = 40.dp
+private val HEADER_MIN_HEIGHT_GROUP = 38.dp
+private val HEADER_MIN_HEIGHT_AREA = 36.dp
+private val TREND_LINE_WIDTH = 34.dp
+private val HEADER_DATE_WIDTH = 54.dp
+
 /**
  * Six-month progress for a header: a tiny line of the progress index plus its % change, coloured
- * like the Progress screen (green up, red down, the header's own muted colour in between). Tapping
- * it opens the Progress screen at this section. Nothing is drawn when the section has no recent data.
+ * like the Progress screen (green up, red down, the header's own muted colour in between). The
+ * line and the right-aligned % sit in fixed-width columns, so they stack neatly row after row.
+ * Tapping it opens the Progress screen at this section. Nothing is drawn when the section has no
+ * recent data.
  */
 @Composable
 private fun TrendBadge(trend: Trend?, neutral: Color, onClick: () -> Unit) {
@@ -960,35 +967,45 @@ private fun TrendBadge(trend: Trend?, neutral: Color, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .padding(end = 4.dp)
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 4.dp, vertical = 3.dp),
     ) {
-        Canvas(modifier = Modifier.width(34.dp).height(12.dp)) {
-            val pts = trend.points
-            val lo = pts.min()
-            val hi = pts.max()
-            val span = hi - lo
-            val stroke = 1.4.dp.toPx()
-            val h = size.height - stroke
-            val path = Path()
-            pts.forEachIndexed { i, v ->
-                val x = size.width * i / (pts.size - 1)
-                // A flat line sits in the middle instead of being stretched into noise.
-                val y = if (span < 0.5f) size.height / 2 else stroke / 2 + h * (1f - (v - lo) / span)
-                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-            }
-            drawPath(path, color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        }
+        Sparkline(trend.points, color, Modifier.size(width = TREND_LINE_WIDTH, height = 12.dp))
         Text(
             text = signedPct(pct),
             fontSize = 10.sp,
             color = color,
             maxLines = 1,
-            modifier = Modifier.padding(start = 4.dp).width(30.dp),
+            textAlign = TextAlign.End,
+            modifier = Modifier.padding(start = 4.dp).width(32.dp),
         )
     }
+}
+
+/** Last-performed date at a header's right edge: a fixed column, compact grey year for older years. */
+@Composable
+private fun HeaderDate(date: LocalDate?, color: Color) {
+    val label = buildAnnotatedString {
+        if (date == null) {
+            append("—")
+        } else {
+            append(formatMonthDay(date))
+            olderYear(date)?.let { year ->
+                withStyle(SpanStyle(fontSize = 9.sp, color = color.copy(alpha = 0.6f))) {
+                    append(" '%02d".format(year % 100))
+                }
+            }
+        }
+    }
+    Text(
+        text = label,
+        fontSize = 11.sp,
+        color = color,
+        maxLines = 1,
+        textAlign = TextAlign.End,
+        modifier = Modifier.width(HEADER_DATE_WIDTH),
+    )
 }
 
 @Composable
@@ -1036,6 +1053,8 @@ private fun SetRowLine(
     onNoteTap: () -> Unit,
     onNoteDelete: () -> Unit,
     onLongPress: () -> Unit,
+    /** The exercise's own recent trend, for its icon (first row only; null = nothing recent). */
+    trend: Trend? = null,
 ) {
     val baseColor =
         if (row.archived) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
@@ -1111,7 +1130,7 @@ private fun SetRowLine(
                 // Name fixed-width (first row only) so the values line up across the rows.
                 Box(
                     modifier = Modifier
-                        .width(130.dp)
+                        .width(146.dp)
                         .combinedClickable(
                             onClick = { if (exerciseName != null) revealName = !revealName },
                             onLongClick = onLongPress,
@@ -1119,7 +1138,7 @@ private fun SetRowLine(
                         .padding(vertical = 3.dp),
                 ) {
                     if (exerciseName != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = exerciseName,
                                 fontSize = 13.sp,
@@ -1127,18 +1146,18 @@ private fun SetRowLine(
                                 color = baseColor,
                                 maxLines = if (revealName) Int.MAX_VALUE else 1,
                                 overflow = if (revealName) TextOverflow.Visible else TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false),
+                                modifier = Modifier.weight(1f),
                             )
                             Spacer(Modifier.width(4.dp))
-                            // One graph icon per exercise (first row only) — opens the combined
-                            // history across all of the exercise's set rows.
-                            GraphIcon(tint = mutedColor, onClick = onHistory)
+                            // One chart icon per exercise (first row only), in a column at the
+                            // name's right edge — opens the combined history across all of the
+                            // exercise's set rows.
+                            ExerciseTrendIcon(trend = trend, tint = mutedColor, onClick = onHistory)
                         }
                     }
                 }
 
-                // Wider now that the graph icon moved up beside the name, freeing room here.
-                Spacer(Modifier.width(28.dp))
+                Spacer(Modifier.width(12.dp))
                 // Reps × weight, then the ± flag immediately beside it (tight group).
                 if (shownReps == null && shownWeight == null) {
                     // Empty: an inviting outlined placeholder instead of a bare dash.
@@ -1432,6 +1451,32 @@ internal fun WheelOrTypeField(
 }
 
 /** Tiny line-chart glyph; taps open the per-row history graph. */
+/**
+ * An exercise's chart icon: its own recent trend line in the same colours as the header badges
+ * (green up, red down, muted flat), or the quiet generic chart glyph when nothing was logged
+ * recently. Either way, tapping it opens the exercise's history.
+ */
+@Composable
+private fun ExerciseTrendIcon(trend: Trend?, tint: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(width = 34.dp, height = 22.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (trend != null && trend.points.size >= 2) {
+            Sparkline(
+                trend.points,
+                trendColor(trend.changePct, tint),
+                Modifier.size(width = 28.dp, height = 12.dp),
+            )
+        } else {
+            GraphIcon(tint = tint, onClick = onClick)
+        }
+    }
+}
+
 @Composable
 private fun GraphIcon(tint: Color, onClick: () -> Unit) {
     Canvas(

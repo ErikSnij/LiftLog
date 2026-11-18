@@ -43,6 +43,7 @@ data class ProgressTrends(
     val categories: Map<Long, Trend> = emptyMap(),
     val muscleGroups: Map<Long, Trend> = emptyMap(),
     val areas: Map<Long, Trend> = emptyMap(),
+    val exercises: Map<Long, Trend> = emptyMap(),
 )
 
 /**
@@ -100,7 +101,7 @@ class ProgressHistory internal constructor(
         return sessionWeeks[node].orEmpty().filter { it >= start }.map { it - start }
     }
 
-    /** Category / muscle group / area trends for the tree headers. */
+    /** Category / muscle group / area / exercise trends for the tree. */
     fun headerTrends(windowWeeks: Int): ProgressTrends {
         fun byId(level: ProgressLevel) =
             nodes(level).mapNotNull { n -> trend(n, windowWeeks)?.let { n.id to it } }.toMap()
@@ -109,6 +110,7 @@ class ProgressHistory internal constructor(
             categories = byId(ProgressLevel.CATEGORY),
             muscleGroups = byId(ProgressLevel.MUSCLE_GROUP),
             areas = byId(ProgressLevel.AREA),
+            exercises = byId(ProgressLevel.EXERCISE),
         )
     }
 }

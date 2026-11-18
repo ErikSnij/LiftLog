@@ -202,4 +202,15 @@ class ProgressIndexTest {
         val weighted = computeProgressTrends(listOf(e(0, 54f, 10f, 2.8f), e(1, 45f, 15f, 2.8f)), emptyList(), today(1))
         assertEquals((87f / 82f - 1f) * 100f, weighted.areas.getValue(1).changePct, 0.01f)
     }
+
+    @Test
+    fun headerTrendsAlsoCoverEachExercise() {
+        val t = computeProgressTrends(
+            listOf(set(0, 100f, 1), set(1, 110f, 1), set(0, 50f, 2), set(1, 50f, 2)),
+            emptyList(),
+            today(1),
+        )
+        assertEquals(10f, t.exercises.getValue(1).changePct, 0.01f)
+        assertEquals(0f, t.exercises.getValue(2).changePct, 0.01f)
+    }
 }
