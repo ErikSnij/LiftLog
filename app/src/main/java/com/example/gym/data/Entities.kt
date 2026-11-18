@@ -105,6 +105,13 @@ data class ExerciseEntity(
      * and gives the inline editor an add-on wheel.
      */
     val addOnWeight: Boolean = false,
+    /**
+     * How much 1 kg of add-on counts compared with 1 kg on the pin/bar, for analysis only (charts,
+     * estimated 1RM, the progress index). On a machine with a descending resistance profile a plate
+     * on the lever loads the weakest point where the stack is lightest, so it counts for more than
+     * its kilos. 1 = as logged. Logged values themselves are never changed by it.
+     */
+    val addOnFactor: Float = 1f,
 )
 
 /**

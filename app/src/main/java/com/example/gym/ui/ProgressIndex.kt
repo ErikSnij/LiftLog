@@ -17,6 +17,8 @@ data class ProgressEntry(
     val areaId: Long,
     val muscleGroupId: Long,
     val categoryId: Long,
+    /** The exercise's add-on weighting (see ExerciseEntity.addOnFactor); 1 = as logged. */
+    val addOnFactor: Float = 1f,
 )
 
 /** The levels of the tree, top to bottom. */
@@ -115,7 +117,7 @@ class ProgressHistory internal constructor(
  * Overall-progress index for every level of the tree, built like a stock index:
  *
  * 1. Each exercise's strength in a week is its best Epley e1RM that week (pin/bar or body
- *    weight, plus any add-on), across all its set rows.
+ *    weight, plus any add-on times the exercise's add-on weighting), across all its set rows.
  * 2. Week to week, an exercise contributes its own change (as a log-ratio), so exercises at
  *    very different loads (a 9kg raise, a 120kg squat) count equally.
  * 3. A parent's weekly change is the plain average of its children's (equal weight per
@@ -143,7 +145,7 @@ fun buildProgressHistory(
     fun load(e: ProgressEntry): Float? {
         // Same rule as the History chart: a BW set uses the latest body weight on or before it.
         val base = e.weight ?: sortedBw.lastOrNull { !it.first.isAfter(e.date) }?.second
-        return totalWeight(base, e.extraKg)
+        return effectiveWeight(base, e.extraKg, e.addOnFactor)
     }
 
     // Best e1RM per exercise per week.

@@ -190,4 +190,16 @@ class ProgressIndexTest {
         val h = buildProgressHistory(listOf(ProgressEntry(monday, null, 100f, null, 1, 1, 1, 1)), emptyList(), today(1))
         assertNull(h)
     }
+
+    @Test
+    fun addOnWeightingScalesOnlyTheAddOn() {
+        // Pin 54 + 10 on the bar, then pin 45 + 15: as logged it reads as a drop (64 → 60)...
+        fun e(week: Int, pin: Float, extra: Float, factor: Float) =
+            ProgressEntry(monday.plusWeeks(week.toLong()), 0f, pin, extra, 1, 1, 1, 1, addOnFactor = factor)
+        val asLogged = computeProgressTrends(listOf(e(0, 54f, 10f, 1f), e(1, 45f, 15f, 1f)), emptyList(), today(1))
+        assertEquals((60f / 64f - 1f) * 100f, asLogged.areas.getValue(1).changePct, 0.01f)
+        // ...but if each add-on kilo counts 2.8x on this machine, it was a gain (82 → 87).
+        val weighted = computeProgressTrends(listOf(e(0, 54f, 10f, 2.8f), e(1, 45f, 15f, 2.8f)), emptyList(), today(1))
+        assertEquals((87f / 82f - 1f) * 100f, weighted.areas.getValue(1).changePct, 0.01f)
+    }
 }

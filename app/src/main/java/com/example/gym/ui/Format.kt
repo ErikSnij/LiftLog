@@ -99,6 +99,13 @@ internal fun epley(reps: Float?, weight: Float?): Float? =
 internal fun totalWeight(weight: Float?, extraKg: Float?): Float? =
     if (weight != null) weight + (extraKg ?: 0f) else extraKg
 
+/**
+ * The load for analysis: like [totalWeight], but the add-on counts [addOnFactor] times its kilos
+ * (an exercise's add-on weighting; 1 = as logged).
+ */
+internal fun effectiveWeight(weight: Float?, extraKg: Float?, addOnFactor: Float): Float? =
+    totalWeight(weight, extraKg?.let { it * addOnFactor })
+
 /** Round to 1 decimal place and trim a trailing ".0" (avoids float-artifact labels). */
 internal fun round1(value: Float): String = trimFloat(Math.round(value * 10f) / 10f)
 
