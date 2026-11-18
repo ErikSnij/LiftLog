@@ -67,7 +67,15 @@ import com.example.gym.data.weightConfig
 import com.example.gym.sync.TrainHubSyncWorker
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.alpha
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -210,6 +218,8 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
     var pickedPoint by remember(exerciseId, metric) { mutableStateOf<Int?>(null) }
     val shownPoint = pickedPoint?.takeIf { it in chart.points.indices } ?: chart.points.lastIndex.takeIf { it >= 0 }
     val haptics = LocalHapticFeedback.current
+    // While the weighting panel is open the list below is dimmed and frozen: the chart is what to watch.
+    val listDim by animateFloatAsState(if (weighting != null) 0.3f else 1f, tween(200), label = "listDim")
 
     // Material's default text style gives every line a 24sp box (1.7x a 14sp row's font), which is
     // what made this screen's rows and cards so tall. A line height proportional to each font keeps
@@ -275,16 +285,18 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
             chart = chart,
             index = shownPoint,
             metric = metric,
+            scrubbing = pickedPoint != null,
             note = if (hasAddOn && addOnFactor != 1f) "add-on ×${trimFloat(addOnFactor)}" else null,
+            onNoteClick = if (weighting == null) ({ weighting = addOnFactor }) else null,
         )
 
         // Chart card with the metric switch underneath (as Progress has its range switch).
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
-            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp),
         ) {
-            Column(Modifier.padding(top = 8.dp, bottom = 8.dp)) {
+            Column(Modifier.padding(top = 6.dp, bottom = 6.dp)) {
                 if (chart.points.isEmpty()) {
                     Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
                         Text("No sets with reps and weight yet", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -298,10 +310,11 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                             if (i != null && i != pickedPoint) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             pickedPoint = i
                         },
-                        modifier = Modifier.fillMaxWidth().height(150.dp).padding(horizontal = 12.dp),
+                        revealKey = exerciseId to metric,
+                        modifier = Modifier.fillMaxWidth().height(180.dp).padding(horizontal = 12.dp),
                     )
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 SegmentedSelector(
                     labels = Metric.entries.map { it.label },
                     selectedIndex = metric.ordinal,
@@ -378,6 +391,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
             )
         }
 
+        Box(Modifier.alpha(listDim)) {
         if (selecting) {
             SelectionBar(
                 count = selected.size,
@@ -407,7 +421,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable(enabled = history.isNotEmpty()) {
+                        .clickable(enabled = history.isNotEmpty() && weighting == null) {
                             draft = null
                             selectedIds = setOf(history.first().id)
                         }
@@ -420,14 +434,16 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { if (draft == null) newDraft()?.let { draft = it } }
+                        .clickable { if (draft == null && weighting == null) newDraft()?.let { draft = it } }
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                 )
             }
         }
+        }
 
         LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            modifier = Modifier.weight(1f).fillMaxWidth().alpha(listDim),
+            userScrollEnabled = weighting == null,
             contentPadding = PaddingValues(bottom = 12.dp),
         ) {
             itemsIndexed(history, key = { _, it -> it.id }) { i, entry ->
@@ -645,12 +661,18 @@ private fun chartData(
  * the chosen metric, the change since the first session, and the set itself.
  */
 @Composable
-private fun HistoryHero(chart: ChartData, index: Int?, metric: Metric, note: String?) {
+private fun HistoryHero(
+    chart: ChartData,
+    index: Int?,
+    metric: Metric,
+    scrubbing: Boolean,
+    note: String?,
+    onNoteClick: (() -> Unit)?,
+) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 2.dp)) {
+    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp)) {
         if (index == null) {
-            Text("—", fontSize = 34.sp, fontWeight = FontWeight.SemiBold, color = muted)
-            Text("Nothing to chart yet", fontSize = 13.sp, color = muted)
+            Text("—", fontSize = 30.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold, color = muted)
         } else {
             val p = chart.points[index]
             val unit = if (metric == Metric.REPS_AT_MAX) "reps" else "kg"
@@ -669,28 +691,37 @@ private fun HistoryHero(chart: ChartData, index: Int?, metric: Metric, note: Str
                 if (index > 0) {
                     Spacer(Modifier.width(12.dp))
                     ChangePill(chart.deltaText(index), trendColor(chart.changeScore(index), muted))
-                    Spacer(Modifier.width(6.dp))
+                }
+                Spacer(Modifier.width(8.dp))
+                // Scrubbing shows which session this is; otherwise where the change is measured from.
+                Text(
+                    when {
+                        scrubbing -> listOfNotNull(formatDate(p.date), p.set).joinToString(" · ")
+                        index > 0 -> "since ${formatDate(chart.points.first().date)}"
+                        else -> formatDate(p.date)
+                    },
+                    fontSize = 12.sp,
+                    color = muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (note != null) {
+                    Spacer(Modifier.weight(1f))
                     Text(
-                        "since ${formatDate(chart.points.first().date)}",
-                        fontSize = 12.sp,
-                        color = muted,
+                        note,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), RoundedCornerShape(50))
+                            .clickable(enabled = onNoteClick != null) { onNoteClick?.invoke() }
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
                     )
                 }
             }
-            val what = when (metric) {
-                Metric.WEIGHT -> "Weight"
-                Metric.ONE_RM -> "Est. 1RM"
-                Metric.REPS_AT_MAX -> "Reps at ${chart.maxWeight?.let(::trimFloat) ?: "max"} kg"
-            }
-            Text(
-                listOfNotNull(what, formatDate(p.date), p.set, note).joinToString(" · "),
-                fontSize = 13.sp,
-                color = muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }
@@ -722,11 +753,14 @@ private fun SessionChart(
     color: Color,
     picked: Int?,
     onPick: (Int?) -> Unit,
+    revealKey: Any,
     modifier: Modifier = Modifier,
 ) {
     val n = points.size
-    val reveal = remember(points) { Animatable(0f) }
-    LaunchedEffect(points) { reveal.animateTo(1f, tween(650, easing = FastOutSlowInEasing)) }
+    // The draw-in plays when the chart first appears or the metric changes, not on every data tweak
+    // (dragging the add-on weighting slider reshapes the line continuously).
+    val reveal = remember(revealKey) { Animatable(0f) }
+    LaunchedEffect(revealKey) { reveal.animateTo(1f, tween(650, easing = FastOutSlowInEasing)) }
 
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1128,8 +1162,23 @@ private fun AddOnWeightingPanel(
         modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp),
     ) {
         Column(Modifier.padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 6.dp)) {
+            var showInfo by remember { mutableStateOf(false) }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Add-on weighting", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text("Add-on weighting", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(8.dp))
+                val infoColor = MaterialTheme.colorScheme.onSurfaceVariant
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(if (showInfo) infoColor.copy(alpha = 0.18f) else Color.Transparent)
+                        .border(1.dp, infoColor.copy(alpha = 0.6f), RoundedCornerShape(50))
+                        .clickable { showInfo = !showInfo },
+                ) {
+                    Text("i", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = infoColor, lineHeight = 12.sp)
+                }
+                Spacer(Modifier.weight(1f))
                 Text(
                     "×${trimFloat(factor)}",
                     fontSize = 20.sp,
@@ -1137,19 +1186,25 @@ private fun AddOnWeightingPanel(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            Text(
-                "How much 1 kg of add-on counts compared with 1 kg on the stack. Slide until the " +
-                    "line runs on smoothly where you changed the add-on. Logged sets stay as they are.",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, end = 4.dp),
-            )
+            AnimatedVisibility(
+                visible = showInfo,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                Text(
+                    "How much 1 kg of add-on counts compared with 1 kg on the stack. Slide until the " +
+                        "line runs on smoothly where you changed the add-on. Logged sets stay as they are.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, end = 4.dp),
+                )
+            }
             Slider(
                 value = factor,
                 onValueChange = { onChange(Math.round(it * 10f) / 10f) },
                 valueRange = 0.5f..4f,
                 steps = 34,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = 2.dp),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
