@@ -1094,6 +1094,8 @@ private fun RecentSets(exerciseId: Long, onOpenHistory: () -> Unit) {
     val dao = remember { (context.applicationContext as LiftLogApp).database.dao() }
     val entries by remember(exerciseId) { dao.observeExerciseHistory(exerciseId) }
         .collectAsStateWithLifecycle(emptyList())
+    val exercise by remember(exerciseId) { dao.observeExercise(exerciseId) }.collectAsStateWithLifecycle(null)
+    val addOnFactor = exercise?.addOnFactor ?: 1f
 
     SectionLabel("Recent sets")
     CardList {
@@ -1119,7 +1121,7 @@ private fun RecentSets(exerciseId: Long, onOpenHistory: () -> Unit) {
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f),
                 )
-                val oneRm = epley(e.reps, totalWeight(e.weight, e.extraKg))
+                val oneRm = epley(e.reps, effectiveWeight(e.weight, e.extraKg, addOnFactor))
                 if (oneRm != null) {
                     Text("1RM ${round1(oneRm)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

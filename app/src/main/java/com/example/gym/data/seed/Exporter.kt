@@ -46,6 +46,8 @@ data class ExportExercise(
     val archived: Boolean = false,
     val weightConfig: ExportWeightConfig? = null,
     val addOnWeight: Boolean = false,
+    /** Add-on weighting for analysis; 1 = as logged (omitted from older exports). */
+    val addOnFactor: Float = 1f,
     val setRows: List<ExportSetRow>,
 )
 
@@ -90,6 +92,7 @@ object Exporter {
                                             name = e.name,
                                             archived = e.archived,
                                             addOnWeight = e.addOnWeight,
+                                            addOnFactor = e.addOnFactor,
                                             weightConfig = e.weightConfig().takeIf { it.mode != WeightMode.DEFAULT }?.let { c ->
                                                 ExportWeightConfig(
                                                     mode = c.mode.name,

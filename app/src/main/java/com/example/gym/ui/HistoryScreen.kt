@@ -27,6 +27,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -121,6 +122,8 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
     var metric by remember { mutableStateOf(Metric.REPS_AT_MAX) }
     var draft by remember { mutableStateOf<LogEntryEntity?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    // Add-on weighting being adjusted (the panel is open while non-null); the chart follows it live.
+    var weighting by remember(exerciseId) { mutableStateOf<Float?>(null) }
     var showBulkExtra by remember { mutableStateOf(false) }
     var showBulkEdit by remember { mutableStateOf(false) }
     // Multi-select: non-empty means the list is in selection mode (tap toggles, no single editor).
@@ -197,7 +200,10 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
     // Chart data for the chosen metric, shared by the hero and the chart. A tapped/dragged point
     // is shown in the hero; otherwise the latest session is.
     val sortedBW = remember(bodyWeights) { bodyWeights.sortedBy { it.date } }
-    val chart = remember(history, metric, sortedBW) { chartData(history, metric, sortedBW) }
+    val savedFactor = exercise?.addOnFactor ?: 1f
+    val addOnFactor = weighting ?: savedFactor
+    val hasAddOn = history.any { it.extraKg != null }
+    val chart = remember(history, metric, sortedBW, addOnFactor) { chartData(history, metric, sortedBW, addOnFactor) }
     var pickedPoint by remember(exerciseId, metric) { mutableStateOf<Int?>(null) }
     val shownPoint = pickedPoint?.takeIf { it in chart.points.indices } ?: chart.points.lastIndex.takeIf { it >= 0 }
     val haptics = LocalHapticFeedback.current
@@ -243,11 +249,27 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                         text = { Text("Add-on weight for all entries…") },
                         onClick = { menuOpen = false; showBulkExtra = true },
                     )
+                    if (hasAddOn) {
+                        DropdownMenuItem(
+                            text = { Text("Add-on weighting…") },
+                            onClick = {
+                                menuOpen = false
+                                draft = null
+                                selectedIds = emptySet()
+                                weighting = savedFactor
+                            },
+                        )
+                    }
                 }
             }
         }
 
-        HistoryHero(chart, shownPoint, metric)
+        HistoryHero(
+            chart = chart,
+            index = shownPoint,
+            metric = metric,
+            note = if (hasAddOn && addOnFactor != 1f) "add-on ×${trimFloat(addOnFactor)}" else null,
+        )
 
         // Chart card with the metric switch underneath (as Progress has its range switch).
         Surface(
@@ -284,7 +306,19 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
 
         // Editor lives OUTSIDE the scrolling list — nesting a vertical wheel inside a
         // vertical LazyColumn lets the list steal the drag, so the wheels wouldn't scroll.
-        draft?.let { d ->
+        weighting?.let { w ->
+            AddOnWeightingPanel(
+                factor = w,
+                onChange = { weighting = it },
+                onSave = {
+                    weighting = null
+                    scope.launch { dao.setAddOnFactor(exerciseId, w) }
+                },
+                onCancel = { weighting = null },
+            )
+        }
+
+        if (weighting == null) draft?.let { d ->
             EntryEditor(
                 draft = d,
                 isNew = d.id == 0L,
@@ -395,8 +429,11 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                     isLast = i == history.lastIndex,
                     selected = if (selecting) entry.id in selectedIds else draft?.id == entry.id,
                     selecting = selecting,
+                    addOnFactor = addOnFactor,
                     onClick = {
-                        if (selecting) {
+                        if (weighting != null) {
+                            // The weighting panel is open: finish (Save / Cancel) that first.
+                        } else if (selecting) {
                             selectedIds = if (entry.id in selectedIds) selectedIds - entry.id else selectedIds + entry.id
                         } else {
                             draft = entry
@@ -404,8 +441,10 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                     },
                     onLongClick = {
                         // Holding an entry starts selecting with it already ticked.
-                        draft = null
-                        selectedIds = selectedIds + entry.id
+                        if (weighting == null) {
+                            draft = null
+                            selectedIds = selectedIds + entry.id
+                        }
                     },
                 )
             }
@@ -558,11 +597,17 @@ private class ChartData(val metric: Metric, val points: List<ChartPoint>, val ma
     }
 }
 
-private fun chartData(history: List<LogEntryEntity>, metric: Metric, sortedBW: List<BodyWeightEntity>): ChartData {
+private fun chartData(
+    history: List<LogEntryEntity>,
+    metric: Metric,
+    sortedBW: List<BodyWeightEntity>,
+    addOnFactor: Float,
+): ChartData {
     // The load actually lifted: pin/bar (or body weight) plus any hand-added extra.
     fun resolvedWeight(e: LogEntryEntity): Float? {
         val base = e.weight ?: sortedBW.lastOrNull { it.date <= e.date }?.weight
-        return if (base != null) base + (e.extraKg ?: 0f) else e.extraKg
+        // The add-on counts as many times its kilos as the exercise's add-on weighting says.
+        return effectiveWeight(base, e.extraKg, addOnFactor)
     }
     val maxWeightEver = if (metric == Metric.REPS_AT_MAX) history.mapNotNull(::resolvedWeight).maxOrNull() else null
     val points = history.sortedBy { it.date }.mapNotNull { e ->
@@ -591,7 +636,7 @@ private fun chartData(history: List<LogEntryEntity>, metric: Metric, sortedBW: L
  * the chosen metric, the change since the first session, and the set itself.
  */
 @Composable
-private fun HistoryHero(chart: ChartData, index: Int?, metric: Metric) {
+private fun HistoryHero(chart: ChartData, index: Int?, metric: Metric, note: String?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 4.dp)) {
         if (index == null) {
@@ -630,7 +675,7 @@ private fun HistoryHero(chart: ChartData, index: Int?, metric: Metric) {
                 Metric.REPS_AT_MAX -> "Reps at ${chart.maxWeight?.let(::trimFloat) ?: "max"} kg"
             }
             Text(
-                "$what · ${formatDate(p.date)} · ${p.set}",
+                listOfNotNull(what, formatDate(p.date), p.set, note).joinToString(" · "),
                 fontSize = 13.sp,
                 color = muted,
                 maxLines = 1,
@@ -975,6 +1020,7 @@ private fun EntryRow(
     isLast: Boolean,
     selected: Boolean,
     selecting: Boolean,
+    addOnFactor: Float,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -1016,7 +1062,7 @@ private fun EntryRow(
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
             )
-            val oneRm = epley(entry.reps, totalWeight(entry.weight, entry.extraKg))
+            val oneRm = epley(entry.reps, effectiveWeight(entry.weight, entry.extraKg, addOnFactor))
             if (oneRm != null) {
                 Text("1RM ${round1(oneRm)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -1048,6 +1094,85 @@ private fun SelectMark(selected: Boolean) {
             drawPath(tick, check, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         } else {
             drawCircle(ring, radius = r - 0.8.dp.toPx(), style = Stroke(width = 1.6.dp.toPx()))
+        }
+    }
+}
+
+/**
+ * Sets how much 1 kg of add-on counts compared with 1 kg on the stack, for this exercise's charts,
+ * estimated 1RM and progress (logged sets are never changed). The chart above redraws live while
+ * sliding, so the factor can be tuned until the line runs on smoothly where the add-on changed —
+ * e.g. on a machine with a descending resistance profile, where a plate on the lever loads the
+ * weakest point that the stack goes easy on.
+ */
+@Composable
+private fun AddOnWeightingPanel(
+    factor: Float,
+    onChange: (Float) -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp),
+    ) {
+        Column(Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Add-on weighting", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(
+                    "×${trimFloat(factor)}",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Text(
+                "How much 1 kg of add-on counts compared with 1 kg on the stack. Slide until the " +
+                    "line runs on smoothly where you changed the add-on. Logged sets stay as they are.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, end = 4.dp),
+            )
+            Slider(
+                value = factor,
+                onValueChange = { onChange(Math.round(it * 10f) / 10f) },
+                valueRange = 0.5f..4f,
+                steps = 34,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "As logged (×1)",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable { onChange(1f) }
+                        .padding(horizontal = 8.dp, vertical = 7.dp),
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "Cancel",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable(onClick = onCancel)
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                )
+                Text(
+                    "Save",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable(onClick = onSave)
+                        .padding(horizontal = 18.dp, vertical = 7.dp),
+                )
+            }
         }
     }
 }

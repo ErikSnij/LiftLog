@@ -191,7 +191,11 @@ class TreeViewModel(app: Application) : AndroidViewModel(app) {
     ) { rows, bodyWeights ->
         buildProgressHistory(
             entries = rows.map {
-                ProgressEntry(it.date, it.reps, it.weight, it.extraKg, it.exerciseId, it.areaId, it.muscleGroupId, it.categoryId)
+                ProgressEntry(
+                    it.date, it.reps, it.weight, it.extraKg,
+                    it.exerciseId, it.areaId, it.muscleGroupId, it.categoryId,
+                    addOnFactor = it.addOnFactor,
+                )
             },
             bodyWeights = bodyWeights.map { it.date to it.weight },
             today = LocalDate.now(),

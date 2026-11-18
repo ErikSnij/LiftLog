@@ -17,6 +17,7 @@ data class ProgressRow(
     val reps: Float?,
     val weight: Float?,
     val extraKg: Float?,
+    val addOnFactor: Float,
     val exerciseId: Long,
     val areaId: Long,
     val muscleGroupId: Long,

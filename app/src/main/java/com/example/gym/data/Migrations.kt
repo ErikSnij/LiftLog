@@ -238,6 +238,13 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
  * v9 → v10: a per-exercise switch for the add-on weight. Off for everything except exercises that
  * already have an add-on logged (set from the History screen), so those keep showing it.
  */
+/** v10 → v11: per-exercise add-on weighting for analysis (exercise.addOnFactor, 1 = as logged). */
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `exercise` ADD COLUMN `addOnFactor` REAL NOT NULL DEFAULT 1.0")
+    }
+}
+
 val MIGRATION_9_10 = object : Migration(9, 10) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE `exercise` ADD COLUMN `addOnWeight` INTEGER NOT NULL DEFAULT 0")
