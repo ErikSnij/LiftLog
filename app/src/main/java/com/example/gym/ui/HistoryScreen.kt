@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -64,8 +63,42 @@ import com.example.gym.data.weightConfig
 import com.example.gym.sync.TrainHubSyncWorker
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
+import java.time.temporal.ChronoUnit
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.log10
+import kotlin.math.pow
 
-private enum class Metric { WEIGHT, REPS_AT_MAX, ONE_RM }
+private enum class Metric(val label: String) {
+    WEIGHT("Weight"),
+    REPS_AT_MAX("Reps @ Max"),
+    ONE_RM("Est. 1RM"),
+}
 
 @Composable
 fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Modifier) {
@@ -161,9 +194,17 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
         )
     }
 
+    // Chart data for the chosen metric, shared by the hero and the chart. A tapped/dragged point
+    // is shown in the hero; otherwise the latest session is.
+    val sortedBW = remember(bodyWeights) { bodyWeights.sortedBy { it.date } }
+    val chart = remember(history, metric, sortedBW) { chartData(history, metric, sortedBW) }
+    var pickedPoint by remember(exerciseId, metric) { mutableStateOf<Int?>(null) }
+    val shownPoint = pickedPoint?.takeIf { it in chart.points.indices } ?: chart.points.lastIndex.takeIf { it >= 0 }
+    val haptics = LocalHapticFeedback.current
+
     Box(modifier = modifier.fillMaxSize().imePadding()) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Top bar
+        // Top bar, matching the app's other screens.
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -172,13 +213,18 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                 "‹ Back",
                 fontSize = 15.sp,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onBack)
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .padding(end = 8.dp),
             )
             Text(
                 name ?: "History",
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
             // Rarely-needed actions live behind this, out of the way.
@@ -200,11 +246,41 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                 }
             }
         }
-        HorizontalDivider()
 
-        MetricToggle(metric) { metric = it }
-        HistoryChart(history, metric, bodyWeights)
-        HorizontalDivider()
+        HistoryHero(chart, shownPoint, metric)
+
+        // Chart card with the metric switch underneath (as Progress has its range switch).
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp),
+        ) {
+            Column(Modifier.padding(top = 12.dp, bottom = 12.dp)) {
+                if (chart.points.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().height(170.dp), contentAlignment = Alignment.Center) {
+                        Text("No sets with reps and weight yet", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    SessionChart(
+                        points = chart.points,
+                        color = trendColor(chart.changeScore(chart.points.lastIndex)),
+                        picked = pickedPoint?.takeIf { it in chart.points.indices },
+                        onPick = { i ->
+                            if (i != null && i != pickedPoint) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            pickedPoint = i
+                        },
+                        modifier = Modifier.fillMaxWidth().height(180.dp).padding(horizontal = 12.dp),
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                SegmentedSelector(
+                    labels = Metric.entries.map { it.label },
+                    selectedIndex = metric.ordinal,
+                    onSelect = { metric = Metric.entries[it] },
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+            }
+        }
 
         // Editor lives OUTSIDE the scrolling list — nesting a vertical wheel inside a
         // vertical LazyColumn lets the list steal the drag, so the wheels wouldn't scroll.
@@ -258,7 +334,6 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                 },
                 onCancel = { draft = null },
             )
-            HorizontalDivider()
         }
 
         if (selecting) {
@@ -272,18 +347,20 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
             )
         } else {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 2.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "History (${history.size})",
+                    "HISTORY (${history.size})",
                     fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.3.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.weight(1f))
                 Text(
                     "Select",
-                    fontSize = 13.sp,
+                    fontSize = 13.5.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
@@ -292,25 +369,30 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                             draft = null
                             selectedIds = setOf(history.first().id)
                         }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                 )
                 Text(
                     "+ Add",
-                    fontSize = 13.sp,
+                    fontSize = 13.5.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { if (draft == null) newDraft()?.let { draft = it } }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                 )
             }
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(history, key = { it.id }) { entry ->
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(bottom = 24.dp),
+        ) {
+            itemsIndexed(history, key = { _, it -> it.id }) { i, entry ->
                 EntryRow(
                     entry = entry,
+                    isFirst = i == 0,
+                    isLast = i == history.lastIndex,
                     selected = if (selecting) entry.id in selectedIds else draft?.id == entry.id,
                     selecting = selecting,
                     onClick = {
@@ -433,196 +515,328 @@ private fun BulkExtraDialog(initial: Float?, onDismiss: () -> Unit, onApply: (Fl
     )
 }
 
-@Composable
-private fun MetricToggle(metric: Metric, onChange: (Metric) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        ToggleChip("Weight", metric == Metric.WEIGHT) { onChange(Metric.WEIGHT) }
-        ToggleChip("Reps @ Max", metric == Metric.REPS_AT_MAX) { onChange(Metric.REPS_AT_MAX) }
-        ToggleChip("Est. 1RM", metric == Metric.ONE_RM) { onChange(Metric.ONE_RM) }
+/** One session on the chart: its date, the metric's value, and the set as logged. */
+private data class ChartPoint(
+    val date: LocalDate,
+    val value: Float,
+    /** Compact, for the label above the dot: "9×86", "10×BW+5". */
+    val label: String,
+    /** Spaced, for the hero caption: "9 × 86 +5". */
+    val set: String,
+)
+
+/** The chart's points for one metric, plus what the hero needs to describe them. */
+private class ChartData(val metric: Metric, val points: List<ChartPoint>, val maxWeight: Float?) {
+    /**
+     * How far point [i] is from the first session, scaled for trendColor's ±1 threshold: a % for
+     * weight and 1RM, tenths of a rep for Reps @ Max (so a 0.1-rep change already counts).
+     */
+    fun changeScore(i: Int): Float {
+        val first = points.firstOrNull()?.value ?: return 0f
+        val v = points.getOrNull(i)?.value ?: return 0f
+        return when (metric) {
+            Metric.REPS_AT_MAX -> (v - first) * 10f
+            else -> if (first > 0f) (v / first - 1f) * 100f else 0f
+        }
+    }
+
+    /** The change from the first session to point [i], as the hero's pill shows it. */
+    fun deltaText(i: Int): String {
+        val first = points.first().value
+        val v = points[i].value
+        return when (metric) {
+            Metric.REPS_AT_MAX -> {
+                val d = Math.round((v - first) * 10f) / 10f
+                when {
+                    d > 0f -> "+${trimFloat(d)} reps"
+                    d < 0f -> "\u2212${trimFloat(-d)} reps"
+                    else -> "0 reps"
+                }
+            }
+            else -> signedPct(if (first > 0f) (v / first - 1f) * 100f else 0f, decimals = 1)
+        }
     }
 }
 
-@Composable
-private fun ToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-    ) {
-        Text(
-            label,
-            fontSize = 13.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
+private fun chartData(history: List<LogEntryEntity>, metric: Metric, sortedBW: List<BodyWeightEntity>): ChartData {
+    // The load actually lifted: pin/bar (or body weight) plus any hand-added extra.
+    fun resolvedWeight(e: LogEntryEntity): Float? {
+        val base = e.weight ?: sortedBW.lastOrNull { it.date <= e.date }?.weight
+        return if (base != null) base + (e.extraKg ?: 0f) else e.extraKg
+    }
+    val maxWeightEver = if (metric == Metric.REPS_AT_MAX) history.mapNotNull(::resolvedWeight).maxOrNull() else null
+    val points = history.sortedBy { it.date }.mapNotNull { e ->
+        val w = resolvedWeight(e)
+        val v = when (metric) {
+            Metric.WEIGHT -> w
+            Metric.ONE_RM -> epley(e.reps, w)
+            Metric.REPS_AT_MAX -> {
+                val e1rm = epley(e.reps, w)
+                if (e1rm != null && maxWeightEver != null) repsAtWeight(e1rm, maxWeightEver) else null
+            }
+        } ?: return@mapNotNull null
+        val extra = e.extraKg?.let { "+${trimFloat(it)}" } ?: ""
+        ChartPoint(
+            date = e.date,
+            value = v,
+            label = "${e.reps?.let(::trimFloat) ?: "?"}×${e.weight?.let(::trimFloat) ?: "BW"}$extra",
+            set = formatValue(e.reps, e.weight) + if (extra.isEmpty()) "" else " $extra",
         )
     }
+    return ChartData(metric, points, maxWeightEver)
 }
 
+/**
+ * The session shown big at the top: the latest one, or the one picked on the chart. Its value in
+ * the chosen metric, the change since the first session, and the set itself.
+ */
 @Composable
-private fun HistoryChart(history: List<LogEntryEntity>, metric: Metric, bodyWeights: List<BodyWeightEntity>) {
-    val sortedBW = remember(bodyWeights) { bodyWeights.sortedBy { it.date } }
-    val points = remember(history, metric, sortedBW) {
-        // The load actually lifted: pin/bar (or body weight) plus any hand-added extra.
-        fun resolvedWeight(e: LogEntryEntity): Float? {
-            val base = e.weight ?: sortedBW.lastOrNull { it.date <= e.date }?.weight
-            return if (base != null) base + (e.extraKg ?: 0f) else e.extraKg
-        }
-        val maxWeightEver = if (metric == Metric.REPS_AT_MAX) history.mapNotNull(::resolvedWeight).maxOrNull() else null
-        history.sortedBy { it.date }.mapNotNull { e ->
-            val w = resolvedWeight(e)
-            val v = when (metric) {
-                Metric.WEIGHT -> w
-                Metric.ONE_RM -> epley(e.reps, w)
-                Metric.REPS_AT_MAX -> {
-                    val e1rm = epley(e.reps, w)
-                    if (e1rm != null && maxWeightEver != null) repsAtWeight(e1rm, maxWeightEver) else null
+private fun HistoryHero(chart: ChartData, index: Int?, metric: Metric) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 4.dp)) {
+        if (index == null) {
+            Text("—", fontSize = 34.sp, fontWeight = FontWeight.SemiBold, color = muted)
+            Text("Nothing to chart yet", fontSize = 13.sp, color = muted)
+        } else {
+            val p = chart.points[index]
+            val unit = if (metric == Metric.REPS_AT_MAX) "reps" else "kg"
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    buildAnnotatedString {
+                        append(round1(p.value))
+                        withStyle(SpanStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, color = muted)) {
+                            append(" $unit")
+                        }
+                    },
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (index > 0) {
+                    Spacer(Modifier.width(12.dp))
+                    ChangePill(chart.deltaText(index), trendColor(chart.changeScore(index), muted))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "since ${formatDate(chart.points.first().date)}",
+                        fontSize = 12.sp,
+                        color = muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
-            if (v != null) ChartPoint(e.date, v, e.reps, w) else null
+            val what = when (metric) {
+                Metric.WEIGHT -> "Weight"
+                Metric.ONE_RM -> "Est. 1RM"
+                Metric.REPS_AT_MAX -> "Reps at ${chart.maxWeight?.let(::trimFloat) ?: "max"} kg"
+            }
+            Text(
+                "$what · ${formatDate(p.date)} · ${p.set}",
+                fontSize = 13.sp,
+                color = muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
+}
 
-    val axisColor = MaterialTheme.colorScheme.outlineVariant
-    val lineColor = MaterialTheme.colorScheme.primary
+/** A tidy axis step near [raw]: 1, 2, 2.5 or 5 times a power of ten. */
+private fun niceAxisStep(raw: Float): Float {
+    if (raw <= 0f) return 1f
+    val magnitude = 10.0.pow(floor(log10(raw.toDouble()))).toFloat()
+    val f = raw / magnitude
+    val nice = when {
+        f <= 1f -> 1f
+        f <= 2f -> 2f
+        f <= 2.5f -> 2.5f
+        f <= 5f -> 5f
+        else -> 10f
+    }
+    return nice * magnitude
+}
+
+/**
+ * Every session as an exact point at its real date, styled like the Progress chart: a smooth line
+ * over a soft fade, gridlines labelled on the right, faint calendar ticks so the gaps between
+ * sessions can be read. Each dot carries its set ("9×86"); labels that would overlap are skipped,
+ * latest first. Tap a point to show it in the hero (tap again to clear), or drag across to scrub.
+ */
+@Composable
+private fun SessionChart(
+    points: List<ChartPoint>,
+    color: Color,
+    picked: Int?,
+    onPick: (Int?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val n = points.size
+    val reveal = remember(points) { Animatable(0f) }
+    LaunchedEffect(points) { reveal.animateTo(1f, tween(650, easing = FastOutSlowInEasing)) }
+
+    val gridColor = MaterialTheme.colorScheme.outlineVariant
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val guideColor = MaterialTheme.colorScheme.onSurface
+    val backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow
     val density = LocalDensity.current
+    val axisLabelPx = with(density) { 10.sp.toPx() }
+    val setLabelPx = with(density) { 9.5.sp.toPx() }
+    val rightGutter: Dp = 40.dp
+    val topGutter: Dp = 18.dp
+    val bottomGutter: Dp = 22.dp
+    val sidePad: Dp = 10.dp
+    val currentPicked by rememberUpdatedState(picked)
+    val currentOnPick by rememberUpdatedState(onPick)
 
-    if (points.isEmpty()) {
-        Box(modifier = Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-            Text("No numeric data to plot", fontSize = 12.sp, color = labelColor)
-        }
-        return
+    // Y range: the data with some air (never a microscope on tiny wiggles), snapped to gridlines.
+    val values = points.map { it.value }
+    val lo = values.min()
+    val hi = values.max()
+    val mid = (lo + hi) / 2
+    val span = maxOf(hi - lo, abs(mid) * 0.12f, 1f)
+    val rawLo = (mid - span * 0.65f).let { if (lo >= 0f) it.coerceAtLeast(0f) else it }
+    val rawHi = mid + span * 0.65f
+    val step = niceAxisStep((rawHi - rawLo) / 3f)
+    val yLo = floor(rawLo / step) * step
+    val yHi = ceil(rawHi / step) * step
+
+    val firstDate = points.first().date
+    val lastDate = points.last().date
+    val totalDays = ChronoUnit.DAYS.between(firstDate, lastDate).toFloat()
+    val ticks = remember(points) { dateTicks(firstDate, lastDate) }
+
+    // Same x mapping for drawing and for touch.
+    fun xOfDate(d: LocalDate, width: Float, gutter: Float, pad: Float): Float {
+        val w = width - gutter
+        return if (totalDays <= 0f) w / 2 else pad + (w - 2 * pad) * ChronoUnit.DAYS.between(firstDate, d) / totalDays
     }
+    fun nearest(x: Float, width: Float, gutter: Float, pad: Float): Int =
+        (0 until n).minByOrNull { abs(xOfDate(points[it].date, width, gutter, pad) - x) } ?: 0
 
-    Canvas(modifier = Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp, bottom = 4.dp, start = 8.dp, end = 8.dp)) {
-        val labelSp  = with(density) { 9.sp.toPx() }
-        val dotR     = with(density) { 5.dp.toPx() }
-        val leftMargin   = with(density) { 46.dp.toPx() }
-        val rightMargin  = with(density) { 8.dp.toPx() }
-        val topMargin    = with(density) { 18.dp.toPx() }   // room for rep labels
-        val bottomMargin = with(density) { 22.dp.toPx() }   // room for date labels
+    Canvas(
+        modifier = modifier
+            .pointerInput(points) {
+                val gutter = rightGutter.toPx()
+                val pad = sidePad.toPx()
+                detectTapGestures { o ->
+                    val i = nearest(o.x, size.width.toFloat(), gutter, pad)
+                    currentOnPick(if (currentPicked == i) null else i)
+                }
+            }
+            .pointerInput(points) {
+                val gutter = rightGutter.toPx()
+                val pad = sidePad.toPx()
+                detectHorizontalDragGestures(
+                    onDragStart = { o -> currentOnPick(nearest(o.x, size.width.toFloat(), gutter, pad)) },
+                    onDragEnd = { currentOnPick(null) },
+                    onDragCancel = { currentOnPick(null) },
+                ) { change, _ ->
+                    change.consume()
+                    currentOnPick(nearest(change.position.x, size.width.toFloat(), gutter, pad))
+                }
+            },
+    ) {
+        val gutter = rightGutter.toPx()
+        val pad = sidePad.toPx()
+        val right = size.width - gutter
+        val top = topGutter.toPx()
+        val bottom = size.height - bottomGutter.toPx()
+        fun xOf(i: Int) = xOfDate(points[i].date, size.width, gutter, pad)
+        fun yOf(v: Float) = bottom - (v - yLo) / (yHi - yLo) * (bottom - top)
 
-        val cLeft   = leftMargin
-        val cRight  = size.width - rightMargin
-        val cTop    = topMargin
-        val cBottom = size.height - bottomMargin
-        val cW = cRight - cLeft
-        val cH = cBottom - cTop
-
-        val minV = points.minOf { it.value }
-        val maxV = points.maxOf { it.value }
-        val mean = (minV + maxV) / 2f
-        val halfRange = maxOf(mean * 0.30f, (maxV - minV) / 2f * 1.15f).coerceAtLeast(1f)
-        // Weight/1RM data is never negative, so floor the axis at 0 for a clean look. Reps @ Max
-        // can legitimately go negative (a set below the all-time max) — only floor it at 0 when
-        // the data itself never dips below 0, so a real negative point is never clipped off-canvas.
-        val yLo = (mean - halfRange).let { if (minV >= 0f) it.coerceAtLeast(0f) else it }
-        val yHi = mean + halfRange
-
-        val hPad = with(density) { 12.dp.toPx() }
-        val minD = points.first().date.toEpochDay()
-        val maxD = points.last().date.toEpochDay()
-        val dRange = (maxD - minD).coerceAtLeast(1L)
-
-        fun xOf(d: Long) = if (points.size == 1) cLeft + cW / 2f
-            else cLeft + hPad + (d - minD).toFloat() / dRange * (cW - 2 * hPad)
-        fun yOf(v: Float) = cBottom - (v - yLo) / (yHi - yLo) * cH
-
-        // Regular, calendar-aligned date ticks (weeks or months) so the gaps between sessions can
-        // be read off the axis; empty when the range is too short for two of them.
-        val ticks = dateTicks(points.first().date, points.last().date)
-        ticks.forEach { t ->
-            val tx = xOf(t.date.toEpochDay())
-            drawLine(axisColor.copy(alpha = 0.25f), Offset(tx, cTop), Offset(tx, cBottom), strokeWidth = 1f)
+        val axisPaint = android.graphics.Paint().apply {
+            textSize = axisLabelPx
+            isAntiAlias = true
+            this.color = labelColor.toArgb()
         }
 
-        // Axis lines
-        drawLine(axisColor, Offset(cLeft, cTop), Offset(cLeft, cBottom), strokeWidth = 1.5f)
-        drawLine(axisColor, Offset(cLeft, cBottom), Offset(cRight, cBottom), strokeWidth = 1.5f)
-
-        // Y grid + labels: min, mid, max of actual values
-        val yLabelPaint = android.graphics.Paint().apply {
-            textSize = labelSp; isAntiAlias = true; color = labelColor.toArgb()
-            textAlign = android.graphics.Paint.Align.RIGHT
+        // Horizontal gridlines, labelled on the right.
+        var g = yLo
+        while (g <= yHi + step * 0.001f) {
+            val y = yOf(g)
+            drawLine(gridColor.copy(alpha = 0.35f), Offset(0f, y), Offset(right, y), 1.dp.toPx())
+            drawIntoCanvas {
+                it.nativeCanvas.drawText(trimFloat(Math.round(g * 10f) / 10f), right + 8.dp.toPx(), y + axisLabelPx / 3, axisPaint)
+            }
+            g += step
         }
-        // The bottom gridline sits exactly at the x-axis (yOf(yLo) == cBottom), so it's rounded up
-        // to the nearest half instead of to the nearest whole number — rounding to nearest could
-        // land below yLo (whenever yLo's fractional part is under .5), drawing that line/label
-        // below the x-axis instead of at or above it.
-        val bottomGrid = kotlin.math.ceil(yLo * 2f) / 2f
-        val gridValues = if (minV == maxV) listOf(Math.round(minV).toFloat())
-            else listOf(bottomGrid, Math.round((yLo + yHi) / 2f).toFloat(), Math.round(yHi).toFloat()).distinct()
-        drawIntoCanvas { canvas ->
-            gridValues.forEach { v ->
-                val gy = yOf(v)
-                drawLine(axisColor.copy(alpha = 0.35f), Offset(cLeft, gy), Offset(cRight, gy), strokeWidth = 1f)
-                canvas.nativeCanvas.drawText(
-                    trimFloat(v),
-                    cLeft - with(density) { 5.dp.toPx() },
-                    gy + labelSp * 0.35f,
-                    yLabelPaint,
-                )
+
+        // Calendar ticks: a faint vertical line each, labels underneath (or first/last when too short).
+        val tickPaint = android.graphics.Paint(axisPaint).apply { textAlign = android.graphics.Paint.Align.CENTER }
+        val dateY = size.height - 4.dp.toPx()
+        val tickLabels = if (ticks.isNotEmpty()) ticks.map { it.date to it.label }
+        else listOf(firstDate to formatMonthDay(firstDate), lastDate to formatMonthDay(lastDate)).distinct()
+        for ((date, label) in tickLabels) {
+            val x = xOfDate(date, size.width, gutter, pad)
+            if (ticks.isNotEmpty()) drawLine(gridColor.copy(alpha = 0.18f), Offset(x, top), Offset(x, bottom), 1.dp.toPx())
+            val half = tickPaint.measureText(label) / 2
+            drawIntoCanvas { it.nativeCanvas.drawText(label, x.coerceIn(half, right - half), dateY, tickPaint) }
+        }
+
+        // The line through every session: smooth, but never overshooting a real value.
+        fun Path.trace() {
+            for (i in 0 until n) {
+                val x = xOf(i)
+                val y = yOf(points[i].value)
+                if (i == 0) moveTo(x, y) else {
+                    val px = xOf(i - 1)
+                    val py = yOf(points[i - 1].value)
+                    val cx = (px + x) / 2
+                    cubicTo(cx, py, cx, y, x, y)
+                }
+            }
+        }
+        clipRect(right = right * reveal.value + 8.dp.toPx()) {
+            if (n > 1) {
+                val fill = Path().apply {
+                    trace()
+                    lineTo(xOf(n - 1), bottom)
+                    lineTo(xOf(0), bottom)
+                    close()
+                }
+                drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.24f), color.copy(alpha = 0f)), startY = top, endY = bottom))
+                drawPath(Path().apply { trace() }, color, style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+            // Every session is a real point.
+            for (i in 0 until n) {
+                val c = Offset(xOf(i), yOf(points[i].value))
+                drawCircle(backgroundColor, radius = 4.8.dp.toPx(), center = c)
+                drawCircle(color, radius = 3.3.dp.toPx(), center = c)
             }
         }
 
-        val offsets = points.map { Offset(xOf(it.date.toEpochDay()), yOf(it.value)) }
-
-        // Lines between points
-        for (i in 0 until offsets.size - 1) {
-            drawLine(lineColor, offsets[i], offsets[i + 1], strokeWidth = 3f)
-        }
-        // Dots — filled white center so they stand out
-        offsets.forEach {
-            drawCircle(lineColor, radius = dotR, center = it)
-            drawCircle(androidx.compose.ui.graphics.Color.White, radius = dotR * 0.45f, center = it)
-        }
-
-        drawIntoCanvas { canvas ->
-            // Rep labels above each dot
-            val repPaint = android.graphics.Paint().apply {
-                textSize = labelSp; isAntiAlias = true; color = labelColor.toArgb()
+        // Set labels above the dots, latest (and picked) first; skip any that would overlap.
+        if (reveal.value >= 0.999f) {
+            val labelPaint = android.graphics.Paint(axisPaint).apply {
+                textSize = setLabelPx
                 textAlign = android.graphics.Paint.Align.CENTER
             }
-            points.forEachIndexed { i, p ->
-                val w = p.weight?.let(::trimFloat) ?: "BW"
-                val r = p.reps?.let(::trimFloat) ?: "?"
-                canvas.nativeCanvas.drawText(
-                    "$r×$w", offsets[i].x, offsets[i].y - dotR - with(density) { 3.dp.toPx() }, repPaint,
-                )
+            val order = buildList {
+                currentPicked?.let { add(it) }
+                for (i in n - 1 downTo 0) if (i != currentPicked) add(i)
             }
+            val taken = ArrayList<ClosedFloatingPointRange<Float>>()
+            val gap = 4.dp.toPx()
+            for (i in order) {
+                val text = points[i].label
+                val half = labelPaint.measureText(text) / 2
+                val x = xOf(i).coerceIn(half, right - half)
+                val span = (x - half - gap)..(x + half + gap)
+                if (taken.any { it.start < span.endInclusive && span.start < it.endInclusive }) continue
+                taken += span
+                val y = yOf(points[i].value) - 9.dp.toPx()
+                labelPaint.color = (if (i == picked) guideColor else labelColor).toArgb()
+                drawIntoCanvas { it.nativeCanvas.drawText(text, x, y, labelPaint) }
+            }
+        }
 
-            val datePaint = android.graphics.Paint().apply {
-                textSize = labelSp; isAntiAlias = true; color = labelColor.toArgb()
-            }
-            val dateY = cBottom + labelSp + with(density) { 3.dp.toPx() }
-            if (ticks.isNotEmpty()) {
-                // X axis: one label per regular tick, centred under its gridline.
-                datePaint.textAlign = android.graphics.Paint.Align.CENTER
-                ticks.forEach { t ->
-                    canvas.nativeCanvas.drawText(t.label, xOf(t.date.toEpochDay()), dateY, datePaint)
-                }
-            } else {
-                // Range too short to tick: label the points themselves (all if ≤ 5, else first + last).
-                val dateIndices = if (points.size <= 5) points.indices.toList() else listOf(0, points.size - 1)
-                dateIndices.forEach { i ->
-                    val ox = offsets[i].x
-                    datePaint.textAlign = when {
-                        ox < cLeft + cW * 0.25f -> android.graphics.Paint.Align.LEFT
-                        ox > cLeft + cW * 0.75f -> android.graphics.Paint.Align.RIGHT
-                        else                     -> android.graphics.Paint.Align.CENTER
-                    }
-                    canvas.nativeCanvas.drawText(formatMonthDay(points[i].date), ox, dateY, datePaint)
-                }
-            }
+        // The picked session: a hairline and a haloed dot.
+        val s = picked
+        if (s != null && s in 0 until n) {
+            val c = Offset(xOf(s), yOf(points[s].value))
+            drawLine(guideColor.copy(alpha = 0.35f), Offset(c.x, top), Offset(c.x, bottom), 1.dp.toPx())
+            drawCircle(color.copy(alpha = 0.22f), radius = 10.dp.toPx(), center = c)
+            drawCircle(backgroundColor, radius = 5.5.dp.toPx(), center = c)
+            drawCircle(color, radius = 4.dp.toPx(), center = c)
         }
     }
 }
@@ -640,12 +854,14 @@ private fun SelectionBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
-            .padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 6.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+            .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TextButton(onClick = onClear) { Text("✕") }
-        Text("$count selected", fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        Text("$count selected", fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
         if (!allSelected) TextButton(onClick = onSelectAll) { Text("All") }
         TextButton(onClick = onEdit) { Text("Edit") }
         TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
@@ -747,49 +963,93 @@ private fun BulkEditDialog(count: Int, onDismiss: () -> Unit, onApply: (BulkChan
     )
 }
 
+/**
+ * One entry, drawn as a slice of a single rounded card (the first and last rows carry its
+ * corners), with the same layout as Progress's "Recent sets". Tap to edit, hold to start selecting.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EntryRow(
     entry: LogEntryEntity,
+    isFirst: Boolean,
+    isLast: Boolean,
     selected: Boolean,
     selecting: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
-    Row(
+    val corner = 20.dp
+    val shape = RoundedCornerShape(
+        topStart = if (isFirst) corner else 0.dp,
+        topEnd = if (isFirst) corner else 0.dp,
+        bottomStart = if (isLast) corner else 0.dp,
+        bottomEnd = if (isLast) corner else 0.dp,
+    )
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (selected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                else Modifier
-            )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 12.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
-        if (selecting) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (selected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)) else Modifier)
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .padding(horizontal = 16.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (selecting) {
+                SelectMark(selected)
+                Spacer(Modifier.width(12.dp))
+            }
             Text(
-                if (selected) "☑" else "☐",
-                fontSize = 16.sp,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(28.dp),
+                formatDate(entry.date),
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.width(96.dp),
+            )
+            Text(
+                formatValue(entry.reps, entry.weight) + (entry.extraKg?.let { " +${trimFloat(it)}" } ?: ""),
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+            )
+            val oneRm = epley(entry.reps, totalWeight(entry.weight, entry.extraKg))
+            if (oneRm != null) {
+                Text("1RM ${round1(oneRm)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (!isLast) {
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
             )
         }
-        Text(formatDate(entry.date), fontSize = 13.sp, modifier = Modifier.width(110.dp))
-        Text(
-            formatValue(entry.reps, entry.weight) + (entry.extraKg?.let { " +${trimFloat(it)}" } ?: ""),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f),
-        )
-        val oneRm = epley(entry.reps, totalWeight(entry.weight, entry.extraKg))
-        Text(
-            if (oneRm != null) "1RM ${round1(oneRm)}" else "",
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+}
+
+/** Round tick for selection mode: an outline ring, or a filled circle with a check when chosen. */
+@Composable
+private fun SelectMark(selected: Boolean) {
+    val primary = MaterialTheme.colorScheme.primary
+    val ring = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    val check = MaterialTheme.colorScheme.onPrimary
+    Canvas(Modifier.size(20.dp)) {
+        val r = size.minDimension / 2
+        if (selected) {
+            drawCircle(primary, radius = r)
+            val tick = Path().apply {
+                moveTo(size.width * 0.28f, size.height * 0.52f)
+                lineTo(size.width * 0.44f, size.height * 0.68f)
+                lineTo(size.width * 0.74f, size.height * 0.36f)
+            }
+            drawPath(tick, check, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+        } else {
+            drawCircle(ring, radius = r - 0.8.dp.toPx(), style = Stroke(width = 1.6.dp.toPx()))
+        }
+    }
 }
 
 @Composable
@@ -809,12 +1069,12 @@ private fun EntryEditor(
 ) {
     val repsValues = remember { wheelValues(60f, step = 1f) }
     val weightValues = remember(weightConfig) { weightWheelValues(weightConfig) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp),
     ) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             WheelOrTypeField(
                 items = repsValues,
@@ -893,16 +1153,20 @@ private fun EntryEditor(
             )
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (!isNew) {
                 Text(
                     "Delete",
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.clickable(onClick = onDelete),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable(onClick = onDelete)
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
                 )
             }
             Spacer(Modifier.weight(1f))
@@ -910,34 +1174,40 @@ private fun EntryEditor(
                 "Cancel",
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable(onClick = onCancel),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .clickable(onClick = onCancel)
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
             )
             Text(
                 "Save",
                 fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable(onClick = onSave),
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .clickable(onClick = onSave)
+                    .padding(horizontal = 18.dp, vertical = 7.dp),
             )
         }
     }
-    HorizontalDivider()
+    }
 }
 
 @Composable
 private fun StepperButton(label: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 9.dp, vertical = 5.dp),
     ) {
         Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
     }
 }
 
-private data class ChartPoint(val date: LocalDate, val value: Float, val reps: Float?, val weight: Float?)
 
 // android.graphics needs an ARGB int; bridge from Compose Color.
 private fun Color.toArgb(): Int = android.graphics.Color.argb(
