@@ -25,7 +25,9 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarDuration
@@ -52,6 +54,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -208,11 +211,15 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
     val shownPoint = pickedPoint?.takeIf { it in chart.points.indices } ?: chart.points.lastIndex.takeIf { it >= 0 }
     val haptics = LocalHapticFeedback.current
 
+    // Material's default text style gives every line a 24sp box (1.7x a 14sp row's font), which is
+    // what made this screen's rows and cards so tall. A line height proportional to each font keeps
+    // the rounded look at a much tighter pitch.
+    ProvideTextStyle(LocalTextStyle.current.copy(lineHeight = 1.3.em)) {
     Box(modifier = modifier.fillMaxSize().imePadding()) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Top bar, matching the app's other screens.
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -222,7 +229,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickable(onClick = onBack)
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .padding(horizontal = 4.dp, vertical = 6.dp)
                     .padding(end = 8.dp),
             )
             Text(
@@ -275,11 +282,11 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
-            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp),
         ) {
-            Column(Modifier.padding(top = 12.dp, bottom = 12.dp)) {
+            Column(Modifier.padding(top = 8.dp, bottom = 8.dp)) {
                 if (chart.points.isEmpty()) {
-                    Box(Modifier.fillMaxWidth().height(170.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
                         Text("No sets with reps and weight yet", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
@@ -291,14 +298,15 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                             if (i != null && i != pickedPoint) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             pickedPoint = i
                         },
-                        modifier = Modifier.fillMaxWidth().height(180.dp).padding(horizontal = 12.dp),
+                        modifier = Modifier.fillMaxWidth().height(150.dp).padding(horizontal = 12.dp),
                     )
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(6.dp))
                 SegmentedSelector(
                     labels = Metric.entries.map { it.label },
                     selectedIndex = metric.ordinal,
                     onSelect = { metric = Metric.entries[it] },
+                    verticalPadding = 5.dp,
                     modifier = Modifier.padding(horizontal = 12.dp),
                 )
             }
@@ -381,7 +389,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
             )
         } else {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -403,7 +411,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                             draft = null
                             selectedIds = setOf(history.first().id)
                         }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                 )
                 Text(
                     "+ Add",
@@ -413,14 +421,14 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { if (draft == null) newDraft()?.let { draft = it } }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                 )
             }
         }
 
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(bottom = 24.dp),
+            contentPadding = PaddingValues(bottom = 12.dp),
         ) {
             itemsIndexed(history, key = { _, it -> it.id }) { i, entry ->
                 EntryRow(
@@ -513,6 +521,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                 },
             )
         }
+    }
     }
 }
 
@@ -638,7 +647,7 @@ private fun chartData(
 @Composable
 private fun HistoryHero(chart: ChartData, index: Int?, metric: Metric, note: String?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 4.dp)) {
+    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 2.dp)) {
         if (index == null) {
             Text("—", fontSize = 34.sp, fontWeight = FontWeight.SemiBold, color = muted)
             Text("Nothing to chart yet", fontSize = 13.sp, color = muted)
@@ -653,7 +662,8 @@ private fun HistoryHero(chart: ChartData, index: Int?, metric: Metric, note: Str
                             append(" $unit")
                         }
                     },
-                    fontSize = 34.sp,
+                    fontSize = 30.sp,
+                    lineHeight = 34.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 if (index > 0) {
@@ -727,7 +737,7 @@ private fun SessionChart(
     val setLabelPx = with(density) { 9.5.sp.toPx() }
     val rightGutter: Dp = 40.dp
     val topGutter: Dp = 18.dp
-    val bottomGutter: Dp = 22.dp
+    val bottomGutter: Dp = 18.dp
     val sidePad: Dp = 10.dp
     val currentPicked by rememberUpdatedState(picked)
     val currentOnPick by rememberUpdatedState(onPick)
@@ -899,7 +909,7 @@ private fun SelectionBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 6.dp)
+            .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 2.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
             .padding(horizontal = 4.dp),
@@ -1043,7 +1053,7 @@ private fun EntryRow(
                 .fillMaxWidth()
                 .then(if (selected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)) else Modifier)
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-                .padding(horizontal = 16.dp, vertical = 11.dp),
+                .padding(horizontal = 16.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (selecting) {
@@ -1115,9 +1125,9 @@ private fun AddOnWeightingPanel(
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp),
     ) {
-        Column(Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 10.dp)) {
+        Column(Modifier.padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Add-on weighting", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 Text(
@@ -1197,9 +1207,9 @@ private fun EntryEditor(
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp),
     ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             WheelOrTypeField(
                 items = repsValues,
@@ -1278,7 +1288,7 @@ private fun EntryEditor(
             )
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
