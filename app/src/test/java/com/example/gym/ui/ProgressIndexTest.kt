@@ -63,9 +63,38 @@ class ProgressIndexTest {
     }
 
     @Test
-    fun anExerciseStaleForOverEightWeeksReentersWithoutAStep() {
-        val t = computeProgressTrends(listOf(set(0, 100f, 1), set(9, 150f, 1)), emptyList(), today(9))
+    fun aGapOfAFewMonthsIsBridgedNotLost() {
+        // Sessions 9 and 12 weeks apart (an exercise trained every couple of months): the progress
+        // made across each gap counts, spread evenly over the weeks between sessions.
+        val entries = listOf(set(0, 100f, 1), set(9, 103f, 1), set(21, 108f, 1))
+        val t = computeProgressTrends(entries, emptyList(), today(21), windowWeeks = 26)
+        assertEquals(8f, t.areas.getValue(1).changePct, 0.01f)
+        // Mid-gap the line is already sloping, not flat.
+        val points = t.areas.getValue(1).points
+        assertTrue(points[4] > points[3] && points[3] > points[2])
+    }
+
+    @Test
+    fun aWindowStartingMidGapStartsOnTheSlope() {
+        // Sessions at weeks 0 and 10, window covers weeks 5..10: half the change is in the window.
+        val t = computeProgressTrends(listOf(set(0, 100f, 1), set(10, 121f, 1)), emptyList(), today(10), windowWeeks = 6)
+        val expected = (100 * (exp(ln(1.21) / 2) - 1)).toFloat() // +10%
+        assertEquals(expected, t.areas.getValue(1).changePct, 0.01f)
+    }
+
+    @Test
+    fun aGapLongerThanSixMonthsReentersWithoutAStep() {
+        val t = computeProgressTrends(listOf(set(0, 100f, 1), set(30, 150f, 1)), emptyList(), today(30), windowWeeks = 52)
         assertEquals(0f, t.areas.getValue(1).changePct, 0.01f)
+    }
+
+    @Test
+    fun sessionPointsMarkTheLoggedWeeksInTheWindow() {
+        val h = buildProgressHistory(listOf(set(0, 100f, 1), set(5, 105f, 1), set(9, 110f, 1)), emptyList(), today(10))!!
+        val ex = ProgressNode(ProgressLevel.EXERCISE, 1)
+        assertEquals(listOf(0, 5, 9), h.sessionPoints(ex, null))
+        // A 6-week window starts at week 5.
+        assertEquals(listOf(0, 4), h.sessionPoints(ex, 6))
     }
 
     @Test
@@ -132,7 +161,7 @@ class ProgressIndexTest {
 
     @Test
     fun allRangeStartsAtTheFirstLoggedWeek() {
-        val h = buildProgressHistory(listOf(set(0, 100f, 1), set(30, 130f, 1)), emptyList(), today(40), staleWeeks = 52)!!
+        val h = buildProgressHistory(listOf(set(0, 100f, 1), set(30, 130f, 1)), emptyList(), today(40), staleWeeks = 52, maxGapWeeks = 52)!!
         val all = h.trend(ProgressNode.OVERALL, null)!!
         assertEquals(monday, all.startWeek)
         assertEquals(41, all.points.size)
