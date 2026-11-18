@@ -337,6 +337,9 @@ private fun EmptyState(title: String, body: String) {
     }
 }
 
+/** Matches the engine's staleness: an exercise drops out after 8 weeks without a log. */
+private const val STALE_DAYS = 8 * 7L
+
 /** A child (or highlight) row's data, computed once per node + range. */
 private class ChildRow(val node: ProgressNode, val name: String, val subtitle: String?, val trend: Trend?, val lastLogged: LocalDate?)
 
@@ -363,8 +366,12 @@ private fun NodePage(
             if (ci.archived && t == null) return@mapNotNull null
             ChildRow(child, ci.name, if (ci.archived) "archived" else null, t, history.lastLogged[child])
         }
-        rows.filter { it.trend != null }.sortedByDescending { it.trend!!.changePct } to
-            rows.filter { it.trend == null }.sortedByDescending { it.lastLogged ?: LocalDate.MIN }
+        // "Not trained recently" = nothing logged for 8+ weeks, whatever the range: a child last
+        // trained near the window's start would otherwise sit among the active ones as a flat 0%.
+        fun recent(r: ChildRow) = r.trend != null &&
+            r.lastLogged != null && ChronoUnit.DAYS.between(r.lastLogged, today) < STALE_DAYS
+        rows.filter(::recent).sortedByDescending { it.trend!!.changePct } to
+            rows.filterNot(::recent).sortedByDescending { it.lastLogged ?: LocalDate.MIN }
     }
 
     // Highlights across every exercise beneath this node.
@@ -510,7 +517,11 @@ private fun BreakdownSections(
 ) {
     Column {
         // ---- Highlights ----
-        if (exercises.size >= 2) {
+        // Only where they add something: above the exercise level (at a muscle the list below
+        // already is the exercises) and with enough of them to pick from.
+        val showHighlights = node.level.ordinal < ProgressLevel.AREA.ordinal &&
+            exercises.count { it.trend != null } >= 3
+        if (showHighlights) {
             val best = exercises.filter { (it.trend?.changePct ?: 0f) >= 1f }.maxByOrNull { it.trend!!.changePct }
             val worst = exercises.filter { (it.trend?.changePct ?: 0f) <= -1f }.minByOrNull { it.trend!!.changePct }
             // Something from the recent routine (logged in the last ~6 months) that's been skipped
