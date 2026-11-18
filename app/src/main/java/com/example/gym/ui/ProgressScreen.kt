@@ -617,6 +617,7 @@ internal fun SegmentedSelector(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    verticalPadding: Dp = 7.dp,
 ) {
     Row(
         modifier = modifier
@@ -639,7 +640,7 @@ internal fun SegmentedSelector(
                     .clip(RoundedCornerShape(11.dp))
                     .background(bg)
                     .clickable { onSelect(i) }
-                    .padding(vertical = 7.dp),
+                    .padding(vertical = verticalPadding),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
