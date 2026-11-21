@@ -256,4 +256,4 @@ fun computeProgressTrends(
 ): ProgressTrends =
     buildProgressHistory(entries, bodyWeights, today, staleWeeks, maxGapWeeks)?.headerTrends(windowWeeks) ?: ProgressTrends()
 
-private fun weekStart(d: LocalDate): LocalDate = d.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+internal fun weekStart(d: LocalDate): LocalDate = d.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
