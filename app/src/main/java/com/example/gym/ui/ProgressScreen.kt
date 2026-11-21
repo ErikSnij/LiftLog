@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gym.LiftLogApp
+import com.example.gym.data.LogEntryEntity
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -497,7 +498,19 @@ private fun NodePage(
         }
 
         if (node.level == ProgressLevel.EXERCISE) {
-            RecentSets(exerciseId = node.id, onOpenHistory = { onOpenHistory(node.id) })
+            // Tapping a set pins its week on the chart; scrubbing/tapping the chart lights the sets
+            // of that week here.
+            RecentSets(
+                exerciseId = node.id,
+                startWeek = trend?.startWeek,
+                weekCount = trend?.points?.size ?: 0,
+                highlightWeek = scrubIndex,
+                onPickWeek = { i ->
+                    if (i != null && i != scrubIndex) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    scrubIndex = i
+                },
+                onOpenHistory = { onOpenHistory(node.id) },
+            )
         } else {
             BreakdownSections(node, exercises, active, inactive, seriesColors, today, onOpen)
         }
@@ -1101,7 +1114,14 @@ private fun ProgressChart(
 // ---- Exercise level: recent sets + into the full history ------------------------------------
 
 @Composable
-private fun RecentSets(exerciseId: Long, onOpenHistory: () -> Unit) {
+private fun RecentSets(
+    exerciseId: Long,
+    startWeek: LocalDate?,
+    weekCount: Int,
+    highlightWeek: Int?,
+    onPickWeek: (Int?) -> Unit,
+    onOpenHistory: () -> Unit,
+) {
     val context = LocalContext.current
     val dao = remember { (context.applicationContext as LiftLogApp).database.dao() }
     val entries by remember(exerciseId) { dao.observeExerciseHistory(exerciseId) }
@@ -1109,9 +1129,18 @@ private fun RecentSets(exerciseId: Long, onOpenHistory: () -> Unit) {
     val exercise by remember(exerciseId) { dao.observeExercise(exerciseId) }.collectAsStateWithLifecycle(null)
     val addOnFactor = exercise?.addOnFactor ?: 1f
 
+    // The chart's week index this set falls in (null when the chart doesn't cover it).
+    fun weekOf(e: LogEntryEntity): Int? = startWeek
+        ?.let { ChronoUnit.WEEKS.between(it, weekStart(e.date)).toInt() }
+        ?.takeIf { it in 0 until weekCount }
+
     SectionLabel("Recent sets")
     CardList {
         val recent = entries.take(6)
+        // A week picked on the chart may be older than the six shown: its sets join the end of the
+        // list so the link is never lost.
+        val older = if (highlightWeek == null) emptyList()
+        else entries.drop(6).filter { weekOf(it) == highlightWeek }
         if (recent.isEmpty()) {
             Text(
                 "No sets logged yet",
@@ -1120,22 +1149,35 @@ private fun RecentSets(exerciseId: Long, onOpenHistory: () -> Unit) {
                 modifier = Modifier.padding(16.dp),
             )
         }
-        recent.forEachIndexed { i, e ->
+        (recent + older).forEachIndexed { i, e ->
             if (i > 0) RowDivider()
+            val week = weekOf(e)
+            val lit = week != null && week == highlightWeek
+            val tint by animateColorAsState(
+                if (lit) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent,
+                tween(140),
+                label = "set-tint",
+            )
+            val accent = if (lit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(tint)
+                    .clickable(enabled = week != null) { onPickWeek(if (lit) null else week) }
+                    .padding(horizontal = 16.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(formatDate(e.date), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp))
+                Text(formatDate(e.date), fontSize = 13.sp, color = accent, modifier = Modifier.width(96.dp))
                 Text(
                     formatValue(e.reps, e.weight) + (e.extraKg?.let { " +${trimFloat(it)}" } ?: ""),
                     fontSize = 14.5.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = if (lit) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (lit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
                 val oneRm = epley(e.reps, effectiveWeight(e.weight, e.extraKg, addOnFactor))
                 if (oneRm != null) {
-                    Text("1RM ${round1(oneRm)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("1RM ${round1(oneRm)}", fontSize = 12.sp, color = accent)
                 }
             }
         }
