@@ -454,6 +454,7 @@ fun HistoryScreen(exerciseId: Long, onBack: () -> Unit, modifier: Modifier = Mod
                     selected = if (selecting) entry.id in selectedIds else draft?.id == entry.id,
                     selecting = selecting,
                     addOnFactor = addOnFactor,
+                    bodyWeight = if (entry.weight == null) bodyWeightOn(sortedBW, entry.date) else null,
                     onClick = {
                         if (weighting != null) {
                             // The weighting panel is open: finish (Save / Cancel) that first.
@@ -622,6 +623,10 @@ private class ChartData(val metric: Metric, val points: List<ChartPoint>, val ma
     }
 }
 
+/** The body weight on [date]: the latest entry on or before it ([sorted] by date). */
+internal fun bodyWeightOn(sorted: List<BodyWeightEntity>, date: LocalDate): Float? =
+    sorted.lastOrNull { it.date <= date }?.weight
+
 private fun chartData(
     history: List<LogEntryEntity>,
     metric: Metric,
@@ -630,7 +635,7 @@ private fun chartData(
 ): ChartData {
     // The load actually lifted: pin/bar (or body weight) plus any hand-added extra.
     fun resolvedWeight(e: LogEntryEntity): Float? {
-        val base = e.weight ?: sortedBW.lastOrNull { it.date <= e.date }?.weight
+        val base = e.weight ?: bodyWeightOn(sortedBW, e.date)
         // The add-on counts as many times its kilos as the exercise's add-on weighting says.
         return effectiveWeight(base, e.extraKg, addOnFactor)
     }
@@ -646,11 +651,16 @@ private fun chartData(
             }
         } ?: return@mapNotNull null
         val extra = e.extraKg?.let { "+${trimFloat(it)}" } ?: ""
+        val bw = if (e.weight == null) bodyWeightOn(sortedBW, e.date) else null
         ChartPoint(
             date = e.date,
             value = v,
-            label = "${e.reps?.let(::trimFloat) ?: "?"}×${e.weight?.let(::trimFloat) ?: "BW"}$extra",
-            set = formatValue(e.reps, e.weight) + if (extra.isEmpty()) "" else " $extra",
+            label = "${e.reps?.let(::trimFloat) ?: "?"}×" + when {
+                e.weight != null -> trimFloat(e.weight)
+                bw != null -> "${round1(bw)} BW"
+                else -> "BW"
+            } + extra,
+            set = formatValue(e.reps, e.weight, bw) + if (extra.isEmpty()) "" else " $extra",
         )
     }
     return ChartData(metric, points, maxWeightEver)
@@ -682,6 +692,12 @@ private fun HistoryHero(
                         append(round1(p.value))
                         withStyle(SpanStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, color = muted)) {
                             append(" $unit")
+                        }
+                        // Reps @ Max is measured at the heaviest load ever lifted: say which.
+                        if (metric == Metric.REPS_AT_MAX && chart.maxWeight != null) {
+                            withStyle(SpanStyle(fontSize = 13.sp, fontWeight = FontWeight.Normal, color = muted)) {
+                                append(" @ ${round1(chart.maxWeight)} kg")
+                            }
                         }
                     },
                     fontSize = 30.sp,
@@ -1065,6 +1081,7 @@ private fun EntryRow(
     selected: Boolean,
     selecting: Boolean,
     addOnFactor: Float,
+    bodyWeight: Float?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -1101,12 +1118,12 @@ private fun EntryRow(
                 modifier = Modifier.width(96.dp),
             )
             Text(
-                formatValue(entry.reps, entry.weight) + (entry.extraKg?.let { " +${trimFloat(it)}" } ?: ""),
+                formatValue(entry.reps, entry.weight, bodyWeight) + (entry.extraKg?.let { " +${trimFloat(it)}" } ?: ""),
                 fontSize = 14.5.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
             )
-            val oneRm = epley(entry.reps, effectiveWeight(entry.weight, entry.extraKg, addOnFactor))
+            val oneRm = epley(entry.reps, effectiveWeight(entry.weight ?: bodyWeight, entry.extraKg, addOnFactor))
             if (oneRm != null) {
                 Text("1RM ${round1(oneRm)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
