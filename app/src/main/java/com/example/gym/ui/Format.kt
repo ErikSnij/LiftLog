@@ -11,11 +11,18 @@ import java.util.Locale
 internal fun trimFloat(value: Float): String =
     if (value % 1f == 0f) value.toInt().toString() else value.toString()
 
-/** "reps × weight" with the seed's null conventions: null weight → BW, null reps → ?. */
-internal fun formatValue(reps: Float?, weight: Float?): String {
+/**
+ * "reps × weight" with the seed's null conventions: null weight → BW, null reps → ?. A bodyweight
+ * set shows the body weight it was done at ("6 × 82 BW") when [bodyWeight] is known.
+ */
+internal fun formatValue(reps: Float?, weight: Float?, bodyWeight: Float? = null): String {
     if (reps == null && weight == null) return "—"
     val r = reps?.let(::trimFloat) ?: "?"
-    val w = weight?.let(::trimFloat) ?: "BW"
+    val w = when {
+        weight != null -> trimFloat(weight)
+        bodyWeight != null -> "${round1(bodyWeight)} BW"
+        else -> "BW"
+    }
     return "$r × $w"
 }
 

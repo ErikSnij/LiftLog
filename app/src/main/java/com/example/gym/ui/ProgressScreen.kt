@@ -1128,6 +1128,8 @@ private fun RecentSets(
         .collectAsStateWithLifecycle(emptyList())
     val exercise by remember(exerciseId) { dao.observeExercise(exerciseId) }.collectAsStateWithLifecycle(null)
     val addOnFactor = exercise?.addOnFactor ?: 1f
+    val bodyWeights by remember { dao.observeBodyWeightHistory() }.collectAsStateWithLifecycle(emptyList())
+    val sortedBW = remember(bodyWeights) { bodyWeights.sortedBy { it.date } }
 
     // The chart's week index this set falls in (null when the chart doesn't cover it).
     fun weekOf(e: LogEntryEntity): Int? = startWeek
@@ -1152,6 +1154,7 @@ private fun RecentSets(
         (recent + older).forEachIndexed { i, e ->
             if (i > 0) RowDivider()
             val week = weekOf(e)
+            val bw = if (e.weight == null) bodyWeightOn(sortedBW, e.date) else null
             val lit = week != null && week == highlightWeek
             val tint by animateColorAsState(
                 if (lit) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent,
@@ -1169,13 +1172,13 @@ private fun RecentSets(
             ) {
                 Text(formatDate(e.date), fontSize = 13.sp, color = accent, modifier = Modifier.width(96.dp))
                 Text(
-                    formatValue(e.reps, e.weight) + (e.extraKg?.let { " +${trimFloat(it)}" } ?: ""),
+                    formatValue(e.reps, e.weight, bw) + (e.extraKg?.let { " +${trimFloat(it)}" } ?: ""),
                     fontSize = 14.5.sp,
                     fontWeight = if (lit) FontWeight.SemiBold else FontWeight.Medium,
                     color = if (lit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
-                val oneRm = epley(e.reps, effectiveWeight(e.weight, e.extraKg, addOnFactor))
+                val oneRm = epley(e.reps, effectiveWeight(e.weight ?: bw, e.extraKg, addOnFactor))
                 if (oneRm != null) {
                     Text("1RM ${round1(oneRm)}", fontSize = 12.sp, color = accent)
                 }
